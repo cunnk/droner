@@ -8,7 +8,16 @@
       "Bash(py -3 -c \"import json; nb=json.load\\(open\\(''C:/Users/cunnk/Desktop/drones/notebooks/phase2_degraded_planner.ipynb''\\)\\); print\\(nb[''metadata''][''kernelspec'']\\)\")",
       "Bash(py -3 -c \"from src.mcp.server import mcp; print\\(''Server OK''\\)\")",
       "Bash(/c/Users/cunnk/anaconda3/python.exe -c \":*)",
-      "Bash(/c/Users/cunnk/anaconda3/python.exe -c \"import anthropic; print\\(''anthropic version:'', anthropic.__version__\\)\")"
+      "Bash(/c/Users/cunnk/anaconda3/python.exe -c \"import anthropic; print\\(''anthropic version:'', anthropic.__version__\\)\")",
+      "Bash(git checkout:*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Read(//c/Users/cunnk/AppData/Local/Programs/Python//**)",
+      "Bash(py --version)",
+      "Bash(py -3 --version)",
+      "Bash(/c/Users/cunnk/AppData/Local/Programs/Python/Python*/python.exe)",
+      "Bash(--version)",
+      "Bash(py -3 run_mangrove.py)"
     ]
   }
 }

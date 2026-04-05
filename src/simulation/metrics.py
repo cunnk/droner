@@ -27,6 +27,16 @@ Monte Carlo
 -----------
 monte_carlo_analysis()  : run N simulations with random failures, return
                           distribution of coverage_pct and time_to_recovery.
+
+Reforestation metrics (additive — only present when seeds_per_cell > 0)
+------------------------------------------------------------------------
+total_seeds_planted     : total individual seed drops recorded.
+unique_cells_seeded     : number of distinct grid cells that received seeds.
+seeds_per_drone_remaining : dict {drone_id: seed_load} at end of mission.
+compute_reforestation_metrics() : full reforestation summary including
+                          total_area_covered_m2, expected_survivors,
+                          seed_series, dock_returns_for_seeds.
+plot_seed_drops()       : scatter plot of actual seed drop positions.
 """
 
 from __future__ import annotations
@@ -142,7 +152,7 @@ def compute_metrics(
                 time_to_recovery = t - t_fail
                 break
 
-    return {
+    result = {
         # Scalars
         "coverage_pct":         round(coverage_pct, 2),          # spray cells (correct)
         "spray_coverage_pct":   round(spray_coverage_pct, 2),    # explicit alias
@@ -164,6 +174,27 @@ def compute_metrics(
         "replan_steps":         [s["timestep"] for s in replan_events],
         "failure_steps":        failure_steps,
     }
+
+    # ---- Reforestation additions (no-op when seed_drops absent / all empty) ----
+    has_seed_data = any(s.get("seed_drops") for s in state_history)
+    if has_seed_data:
+        total_seeds_planted = sum(
+            len(s.get("seed_drops", [])) for s in state_history
+        )
+        seeded_cells = {
+            tuple(drop["nominal"])
+            for s in state_history
+            for drop in s.get("seed_drops", [])
+        }
+        seeds_per_drone_remaining = {
+            ds["id"]: ds.get("seed_load")
+            for ds in state_history[-1]["drones"]
+        }
+        result["total_seeds_planted"]        = total_seeds_planted
+        result["unique_cells_seeded"]        = len(seeded_cells)
+        result["seeds_per_drone_remaining"]  = seeds_per_drone_remaining
+
+    return result
 
 
 def compare_runs(
@@ -271,6 +302,9 @@ def monte_carlo_analysis(
     battery_drain_range: tuple = (0.0, 0.0),
     replan_objective: str = "makespan",
     seed: int = 0,
+    # Reforestation pass-through (0 = spray/ag mode, backward compat)
+    seeds_per_cell: float = 0.0,
+    seed_jitter_sigma: float = 0.3,
 ) -> Dict[str, Any]:
     """
     Run N simulations with randomly injected failures. Returns the distribution
@@ -337,6 +371,8 @@ def monte_carlo_analysis(
             failure_events=failure_events,
             battery_drain_per_cell=drain,
             replan_objective=replan_objective,
+            seeds_per_cell=seeds_per_cell,
+            seed_jitter_sigma=seed_jitter_sigma,
         )
         m = compute_metrics(hist, strips, nrows, ncols)
         coverage_pcts.append(m["coverage_pct"])
@@ -479,4 +515,154 @@ def plot_metrics_bar(
     ax.set_title(title)
     ax.legend()
     ax.grid(axis="y", alpha=0.3)
+    return ax
+
+
+# ---------------------------------------------------------------------------
+# Reforestation-specific metrics
+# ---------------------------------------------------------------------------
+
+def compute_reforestation_metrics(
+    state_history: List[Dict[str, Any]],
+    strips: List[Strip],
+    nrows: int,
+    ncols: int,
+    meters_per_cell: float = 1.0,
+    survival_rate: float = 0.40,
+    target_density_per_m2: float = 1.0,
+) -> Dict[str, Any]:
+    """Full reforestation mission summary.
+
+    Extends compute_metrics() with seed-specific KPIs.  All existing metric
+    keys are present; the following are added:
+
+    total_seeds_planted     : total seed drop events recorded
+    unique_cells_seeded     : distinct cells that received at least one seed
+    total_area_covered_m2   : unique_cells_seeded × meters_per_cell²
+    expected_survivors      : total_seeds_planted × survival_rate
+    seeds_per_drone_remaining : {drone_id: seeds_left} at end of mission
+    seed_series             : {drone_id: [seed_load at each timestep]}
+    dock_returns_for_seeds  : number of hopper-empty dock returns during mission
+
+    Parameters
+    ----------
+    state_history   : output of simulate() with seeds_per_cell > 0
+    strips          : strip list used in the simulation
+    nrows, ncols    : grid dimensions
+    meters_per_cell : real-world size of one grid cell (metres)
+                      from compute_sim_params()["meters_per_cell"]
+    survival_rate   : fraction of planted seeds expected to survive (0–1)
+    target_density_per_m2 : desired surviving seedlings per m²
+    """
+    # Base metrics (includes total_seeds_planted etc. if seed_drops present)
+    m = compute_metrics(state_history, strips, nrows, ncols)
+
+    # Derived area and survival stats
+    cell_area_m2        = meters_per_cell ** 2
+    unique_cells        = m.get("unique_cells_seeded", 0)
+    total_seeds         = m.get("total_seeds_planted", 0)
+    area_m2             = unique_cells * cell_area_m2
+    expected_survivors  = total_seeds * survival_rate
+
+    m["total_area_covered_m2"] = round(area_m2, 2)
+    m["expected_survivors"]    = round(expected_survivors, 1)
+    m["cell_area_m2"]          = round(cell_area_m2, 4)
+    m["meters_per_cell"]       = round(meters_per_cell, 3)
+
+    # Seed-load time series: {drone_id: [seed_load at each step]}
+    seed_series: Dict[int, List[float]] = {}
+    for state in state_history:
+        for ds in state["drones"]:
+            seed_load = ds.get("seed_load")
+            if seed_load is not None:
+                seed_series.setdefault(ds["id"], []).append(seed_load)
+    m["seed_series"] = seed_series
+
+    # Count hopper-empty dock returns
+    dock_returns_seeds = sum(
+        1 for s in state_history
+        if s.get("event") and "seed hopper empty" in s["event"]
+    )
+    m["dock_returns_for_seeds"] = dock_returns_seeds
+
+    return m
+
+
+def print_reforestation_summary(metrics: Dict[str, Any], config=None) -> None:
+    """Pretty-print the operator-facing reforestation mission summary."""
+    print(f"\n{'='*54}")
+    if config is not None:
+        print(f"  {getattr(config, 'name', 'Reforestation Mission')}")
+    else:
+        print("  Reforestation Mission Summary")
+    print(f"{'='*54}")
+    print(f"  Coverage")
+    print(f"    % area seeded       : {metrics.get('coverage_pct', '–')} %")
+    print(f"    Unique cells seeded : {metrics.get('unique_cells_seeded', '–')}")
+    print(f"    Area covered        : {metrics.get('total_area_covered_m2', '–')} m²")
+    print(f"  Seeds")
+    print(f"    Total seeds planted : {metrics.get('total_seeds_planted', '–'):,}"
+          if isinstance(metrics.get('total_seeds_planted'), int) else
+          f"    Total seeds planted : {metrics.get('total_seeds_planted', '–')}")
+    print(f"    Expected survivors  : {metrics.get('expected_survivors', '–')}")
+    print(f"    Hopper refill stops : {metrics.get('dock_returns_for_seeds', '–')}")
+    print(f"  Mission")
+    print(f"    Makespan            : {metrics.get('makespan', '–')} steps")
+    print(f"    Replanning events   : {metrics.get('replan_count', '–')}")
+    print(f"    Failed drones       : {metrics.get('failed_drone_count', '–')}")
+    if metrics.get("time_to_recovery") is not None:
+        print(f"    Time to recovery    : {metrics['time_to_recovery']} steps")
+    if metrics.get("coverage_at_failure") is not None:
+        print(f"    Coverage at failure : {metrics['coverage_at_failure']} %")
+    print(f"{'='*54}\n")
+
+
+def plot_seed_drops(
+    state_history: List[Dict[str, Any]],
+    nrows: int,
+    ncols: int,
+    ax=None,
+    alpha: float = 0.12,
+    color: str = "#4a148c",
+    title: str = "Seed Drop Distribution",
+):
+    """Scatter plot of all actual seed drop positions across the mission.
+
+    Shows the natural jitter distribution — seeds form a cloud rather than a
+    perfect grid, demonstrating organic-looking planting patterns.
+
+    Parameters
+    ----------
+    state_history : output of simulate() with seeds_per_cell > 0
+    nrows, ncols  : grid dimensions (for axis limits)
+    ax            : optional existing matplotlib Axes
+    alpha         : point transparency (lower = better for dense patterns)
+    color         : scatter point colour
+    title         : plot title
+    """
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(6, 6))
+
+    xs, ys = [], []
+    for state in state_history:
+        for drop in state.get("seed_drops", []):
+            r, c = drop["actual"]
+            xs.append(c)          # col → x
+            ys.append(nrows - r)  # row → y (flip so row 0 is top)
+
+    if xs:
+        ax.scatter(xs, ys, s=2, alpha=alpha, color=color, linewidths=0)
+    else:
+        ax.text(0.5, 0.5, "No seed drops recorded\n(seeds_per_cell = 0?)",
+                ha="center", va="center", transform=ax.transAxes, color="gray")
+
+    ax.set_xlim(-0.5, ncols - 0.5)
+    ax.set_ylim(-0.5, nrows - 0.5)
+    ax.set_aspect("equal")
+    ax.set_xlabel("Grid column")
+    ax.set_ylabel("Grid row (flipped)")
+    ax.set_title(f"{title}\n({len(xs):,} drops from {len(state_history)} timesteps)")
+    ax.grid(alpha=0.15)
     return ax
