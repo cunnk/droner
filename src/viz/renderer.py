@@ -77,11 +77,25 @@ STATE_STYLE: Dict[str, tuple] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _coverage_pct(grid: List[List[int]]) -> float:
-    flat  = [c for row in grid for c in row]
-    total = len(flat)
-    done  = sum(1 for c in flat if c == 2)
-    return 100.0 * done / total if total else 0.0
+def _coverage_pct(grid: List[List[int]],
+                  n_plantable: Optional[int] = None) -> float:
+    """Fraction of cells with state==2 (complete/seeded).
+
+    Parameters
+    ----------
+    grid:
+        2-D list of cell states.
+    n_plantable:
+        Denominator override — total number of plantable (soil mask) cells.
+        When provided, coverage is expressed as a fraction of the viable area
+        rather than the full grid.  Pass ``sum(len(s.spray_cells) for s in strips)``
+        from the calling code.  When None (default), the full grid is used as
+        denominator (backward-compatible behaviour for spray missions).
+    """
+    flat = [c for row in grid for c in row]
+    done = sum(1 for c in flat if c == 2)
+    denom = n_plantable if (n_plantable is not None and n_plantable > 0) else len(flat)
+    return 100.0 * done / denom if denom else 0.0
 
 
 def _replan_steps(state_history: List[Dict[str, Any]]) -> List[int]:
@@ -115,6 +129,10 @@ def animate(
     show_grid_lines: Optional[bool] = None,
     frame_step: int = 1,
     max_frames: Optional[int] = None,
+    # ---- Reforestation options (backward-compatible defaults) ----
+    show_seed_drops: bool = False,
+    mode_label: str = "Drone Fleet Simulation",
+    n_plantable_cells: Optional[int] = None,
 ) -> FuncAnimation:
     """
     Render state_history as a matplotlib animation.
@@ -140,6 +158,18 @@ def animate(
                           Use e.g. 10 to cut a 2000-step sim to 200 frames.
         max_frames      : If set, auto-compute frame_step so the GIF has at most
                           this many frames. Overrides frame_step when specified.
+        show_seed_drops : If True, render a static scatter of all seed drop
+                          positions (from state_history["seed_drops"]) as a
+                          translucent purple cloud on the grid.  Zero per-frame
+                          cost — drawn once before the animation loop.
+        mode_label      : Title prefix shown in every frame (e.g.
+                          "Mangrove Reforestation Mission").
+        n_plantable_cells: Total number of plantable (soil mask) cells.
+                          When provided, the info panel and title show
+                          "soil seeded %" using this as the denominator
+                          instead of the full grid area.  Pass
+                          ``sum(len(s.spray_cells) for s in strips)``.
+                          Omit for spray missions (backward-compatible).
 
     Returns:
         FuncAnimation object (useful for Jupyter display).
@@ -220,6 +250,19 @@ def animate(
                      fontsize=max(5, dock_marker_size - 3),
                      color="white", fontweight="bold", zorder=8)
 
+    # Seed drop scatter (reforestation mode — static, drawn once)
+    if show_seed_drops:
+        all_xs, all_ys = [], []
+        for state in state_history:
+            for drop in state.get("seed_drops", []):
+                ar, ac = drop["actual"]
+                all_xs.append(ac)
+                all_ys.append(ar)
+        if all_xs:
+            ax_grid.scatter(all_xs, all_ys, s=1.5, alpha=0.08,
+                            color="#4a148c", linewidths=0, zorder=2.5,
+                            label="Seed drops")
+
     # Drone markers
     drone_circles = {}
     drone_texts   = {}
@@ -255,6 +298,15 @@ def animate(
     ax_grid.legend(handles=legend_patches, loc="lower right",
                    fontsize=6.5, framealpha=0.85)
 
+    # Pre-compute cumulative seeds planted up to each frame index
+    # (empty list when no seed data — backward-compatible)
+    _cumulative_seeds: List[int] = []
+    _running = 0
+    for _s in state_history:
+        _running += len(_s.get("seed_drops", []))
+        _cumulative_seeds.append(_running)
+    _seed_mode = _running > 0   # True only when seed drops are present
+
     # Info panel
     info_text = ax_info.text(
         0.05, 0.95, "", transform=ax_info.transAxes,
@@ -285,30 +337,56 @@ def animate(
             circle.set_facecolor(face_colour)
             circle.set_alpha(style[1])
 
-        cov         = _coverage_pct(state["grid"])
+        # Coverage — use plantable denominator when available
+        cov         = _coverage_pct(state["grid"], n_plantable_cells)
         replan_flag = " [REPLAN]" if t in replan_steps else ""
         event_str   = state.get("event") or "—"
         if len(event_str) > 38:
             event_str = event_str[:35] + "..."
 
+        seeds_so_far = _cumulative_seeds[frame_idx] if _seed_mode else None
+
+        # Build info panel text
+        if _seed_mode:
+            cov_label  = "Soil seeded"
+            seeds_line = f"Seeds     : {seeds_so_far:,}\n"
+        else:
+            cov_label  = "Coverage"
+            seeds_line = ""
+
         info_lines = (
-            f"Step    : {t}{replan_flag}\n"
-            f"Coverage: {cov:.1f}%\n"
+            f"Step      : {t}{replan_flag}\n"
+            f"{cov_label:<10}: {cov:.1f}%\n"
+            f"{seeds_line}"
             f"\nDrones\n"
             + "\n".join(
-                f"  D{ds['id']} {ds['state'][:9]:<9} "
-                f"bat={ds['battery']:.0f}%"
+                (
+                    f"  D{ds['id']} {ds['state'][:9]:<9} "
+                    f"bat={ds['battery']:.0f}%"
+                    + (f" sd={ds['seed_load']:.0f}"
+                       if ds.get("seed_load") is not None else "")
+                )
                 for ds in state["drones"]
             )
             + f"\n\nEvent:\n  {event_str}"
         )
         info_text.set_text(info_lines)
 
-        ax_grid.set_title(
-            f"Drone Fleet Simulation  |  t={t}  |  {cov:.1f}% covered"
-            + ("  [overlay]" if overlay_mode else ""),
-            fontsize=11, fontweight="bold",
-        )
+        # Title — show seeds + soil-seeded % in reforestation mode
+        if _seed_mode:
+            title = (
+                f"{mode_label}  |  t={t}  |  "
+                f"{cov:.1f}% soil seeded  |  "
+                f"{seeds_so_far:,} seeds planted"
+                + ("  [overlay]" if overlay_mode else "")
+            )
+        else:
+            title = (
+                f"{mode_label}  |  t={t}  |  {cov:.1f}% covered"
+                + ("  [overlay]" if overlay_mode else "")
+            )
+        ax_grid.set_title(title, fontsize=10, fontweight="bold")
+
         return [im, info_text] + list(drone_circles.values()) + list(drone_texts.values())
 
     frame_indices = range(0, len(state_history), frame_step)

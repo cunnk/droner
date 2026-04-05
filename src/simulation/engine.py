@@ -44,11 +44,23 @@ Permanent failures trigger a MILP replan of unfinished strips across
 remaining active drones. If the solver returns infeasible or times out
 with no solution, a greedy least-workload fallback is used so strips
 are never silently dropped.
+
+Seed capacity (reforestation mode)
+-----------------------------------
+Pass seeds_per_cell > 0 to activate reforestation mode.  Seeds deplete
+as the drone sprays; when the hopper hits 0 the drone returns to dock,
+refills (instantaneous alongside battery recharge), then resumes — using
+the same _initiate_return() / recharge lifecycle as battery failures.
+Seed drops are recorded per timestep in state_history as "seed_drops"
+with Gaussian jitter applied to the recorded positions so the planting
+cloud looks natural rather than grid-aligned.
 """
 
 from __future__ import annotations
 import copy
 from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 from src.field.generator import Strip
 from src.optimizer.milp import AssignmentResult, DroneSpec, assign_strips
@@ -137,6 +149,9 @@ def simulate(
     dock_positions: Optional[List[Tuple[int, int]]] = None,
     max_timesteps: Optional[int] = None,
     initial_state: Optional[Dict[str, Any]] = None,
+    # ---- Reforestation / seed mode (defaults keep backward compatibility) ----
+    seeds_per_cell: float = 0.0,
+    seed_jitter_sigma: float = 0.3,
 ) -> List[Dict[str, Any]]:
     """
     Run the simulation and return a state_history list.
@@ -169,6 +184,12 @@ def simulate(
                                 drone positions, battery, and in-progress strips are
                                 restored from the frame.  stale held_strips are cleared
                                 so drones pick from the new assignment after recharging.
+        seeds_per_cell        : Average seeds dispensed per spray cell (reforestation
+                                mode).  0 = spray/ag mode — all seed logic is skipped.
+                                Derive from MissionConfig via compute_sim_params().
+        seed_jitter_sigma     : Std dev (in grid cells) of Gaussian positional jitter
+                                applied to recorded seed drop coordinates.  Produces a
+                                natural, non-grid-aligned seed cloud.  0 = no jitter.
     """
     dock_positions  = dock_positions or [(0, 0)]
     failure_events  = failure_events or []
@@ -197,6 +218,9 @@ def simulate(
             # Restore position as a tuple (JSON round-trips lists)
             ds["position"] = tuple(ds["position"])
             ds["dock"]     = tuple(ds["dock"])
+            # Ensure seed_load exists (backward compat with pre-reforestation histories)
+            if "seed_load" not in ds:
+                ds["seed_load"] = float(drone_map[ds["id"]].seed_capacity)
             if ds.get("transit_target") is not None:
                 ds["transit_target"] = tuple(ds["transit_target"])
             drone_states[ds["id"]] = ds
@@ -227,6 +251,7 @@ def simulate(
                 "transit_action"    : None,
                 "battery"           : d.battery,
                 "spray_capacity"    : d.spray_capacity,
+                "seed_load"         : float(d.seed_capacity),  # seeds remaining
                 "frozen_remaining"  : 0,
                 "recharge_countdown": 0,
                 "held_strips"       : [],
@@ -346,8 +371,10 @@ def simulate(
             if ds["recharge_countdown"] > 0:
                 continue
 
-            # Recharge complete — restore battery and return to field
+            # Recharge complete — restore battery (and seed hopper) then return to field
             ds["battery"] = 100.0
+            if seeds_per_cell > 0:
+                ds["seed_load"] = float(drone_map[d_id].seed_capacity)
             charging_drones.discard(d_id)
             active_drones.add(d_id)
 
@@ -492,6 +519,22 @@ def simulate(
                             all_done = False
                             continue
 
+                    # ---- Seed depletion (reforestation mode) ----
+                    if seeds_per_cell > 0 and (r, c) in spray_set:
+                        ds["seed_load"] = max(0.0, ds["seed_load"] - seeds_per_cell)
+                        if ds["seed_load"] <= 0:
+                            # Hopper empty — return to dock to refill (same as battery)
+                            held = [ds["current_strip"]] + list(queues.get(d_id, []))
+                            ds["held_strips"]          = held
+                            queues[d_id]               = []
+                            ds["current_strip"]        = None
+                            ds["current_strip_cells"]  = []
+                            ds["current_cell_index"]   = 0
+                            _initiate_return(d_id, ds, queues, event_log,
+                                             "seed hopper empty")
+                            all_done = False
+                            continue
+
                     all_done = False
 
                 else:
@@ -511,10 +554,15 @@ def simulate(
         # 4. Record state
         # --------------------------------------------------------------------
         state_history.append({
-            "timestep": t,
-            "grid"    : copy.deepcopy(grid),
-            "drones"  : copy.deepcopy(list(drone_states.values())),
-            "event"   : "; ".join(event_log) if event_log else None,
+            "timestep"  : t,
+            "grid"      : copy.deepcopy(grid),
+            "drones"    : copy.deepcopy(list(drone_states.values())),
+            "event"     : "; ".join(event_log) if event_log else None,
+            "seed_drops": _compute_seed_drops(
+                              drone_states, strip_map,
+                              seeds_per_cell, seed_jitter_sigma,
+                              nrows, ncols,
+                          ) if seeds_per_cell > 0 else [],
         })
 
         t += 1
@@ -661,3 +709,72 @@ def _replan(
             queues[d_id].append(s.id)
             workloads[d_id] += s.time
         event_log.append(f"Replan failed ({exc}); greedy fallback used")
+
+
+# ---------------------------------------------------------------------------
+# Seed drop recording (reforestation mode)
+# ---------------------------------------------------------------------------
+
+def _compute_seed_drops(
+    drone_states: Dict[int, DroneState],
+    strip_map: Dict[int, Any],
+    seeds_per_cell: float,
+    jitter_sigma: float,
+    nrows: int,
+    ncols: int,
+) -> List[Dict[str, Any]]:
+    """Build the list of seed drop events for the current timestep.
+
+    For every drone that is actively spraying and has just advanced onto a
+    spray cell, we record *n_seeds* drop events with Gaussian jitter applied
+    to the nominal cell-centre position.
+
+    Parameters
+    ----------
+    drone_states : current drone state dicts
+    strip_map    : strip_id → Strip
+    seeds_per_cell : average seeds per spray cell (may be fractional)
+    jitter_sigma : std dev of positional jitter in grid cells
+    nrows, ncols : grid bounds for clipping
+
+    Returns
+    -------
+    List of dicts, one per individual seed:
+        {"drone_id": int, "nominal": [r, c], "actual": [ar, ac]}
+    """
+    drops: List[Dict[str, Any]] = []
+
+    for d_id, ds in drone_states.items():
+        if ds["state"] != "spraying":
+            continue
+        ci    = ds["current_cell_index"]
+        cells = ds["current_strip_cells"]
+        if ci == 0 or ci > len(cells):
+            continue  # nothing processed this step yet
+        r, c = cells[ci - 1]  # cell just processed
+
+        sid = ds.get("current_strip")
+        if sid is None or sid not in strip_map:
+            continue
+        spray_set = set(strip_map[sid].spray_cells)
+        if (r, c) not in spray_set:
+            continue
+
+        # Number of seeds to record this step (at least 1 when any seed is due)
+        n_seeds = max(1, int(round(seeds_per_cell)))
+
+        for _ in range(n_seeds):
+            if jitter_sigma > 0:
+                dr = float(np.random.normal(0.0, jitter_sigma))
+                dc = float(np.random.normal(0.0, jitter_sigma))
+            else:
+                dr, dc = 0.0, 0.0
+            ar = int(np.clip(round(r + dr), 0, nrows - 1))
+            ac = int(np.clip(round(c + dc), 0, ncols - 1))
+            drops.append({
+                "drone_id": d_id,
+                "nominal" : [r, c],
+                "actual"  : [ar, ac],
+            })
+
+    return drops

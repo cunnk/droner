@@ -25,7 +25,8 @@ from src.field.generator import Strip
 class DroneSpec:
     id: int
     battery: float = 100.0        # percentage (0–100)
-    spray_capacity: float = 100.0 # percentage (0–100)
+    spray_capacity: float = 100.0 # percentage (0–100) — spraying mode
+    seed_capacity: int = 6000     # seeds per voyage   — reforestation mode
 
 
 @dataclass
