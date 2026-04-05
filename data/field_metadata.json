@@ -1,0 +1,74 @@
+{
+  "fields": [
+    {
+      "name": "field_multizone",
+      "file": "field_multizone.jpg",
+      "description": "Three crop zones meeting at diagonal boundaries — canola (yellow), wheat/grass (green), bare soil (brown). Strong spatial variation, clear non-axis-aligned zone edges.",
+      "source_size": [641, 360],
+      "recommended": {
+        "channel": "pseudo_ndvi",
+        "invert": false,
+        "target_size": 64,
+        "orientation_deg": 135,
+        "spray_threshold": 0.2
+      },
+      "notes": "Best overall for optimizer demos. pseudo_ndvi separates canola (high) from soil (low) cleanly. Diagonal zone boundaries justify non-zero orientation."
+    },
+    {
+      "name": "field_orchard",
+      "file": "field_orchard.jpg",
+      "description": "Orchard or citrus grove with distinct tree canopy rows, tractor visible on access road. Clear diagonal row orientation ~30-40 degrees from horizontal.",
+      "source_size": [299, 168],
+      "recommended": {
+        "channel": "green",
+        "invert": false,
+        "target_size": 32,
+        "orientation_deg": 35,
+        "spray_threshold": 0.3
+      },
+      "notes": "Smallest source image — use target_size=32 to avoid upscaling artifacts. Best for orientation_deg demo: rows are clearly not east-west. Green channel cleanly separates canopy from paths."
+    },
+    {
+      "name": "field_elevation",
+      "file": "field_elevation.jpg",
+      "description": "Oblique aerial view of multiple adjacent field parcels — vineyard rows on left, broad green fields on right, tree windbreak through centre. Multiple distinct crop types.",
+      "source_size": [3840, 2160],
+      "recommended": {
+        "channel": "pseudo_ndvi",
+        "invert": false,
+        "target_size": 64,
+        "orientation_deg": 0,
+        "spray_threshold": 0.15
+      },
+      "notes": "Oblique angle compresses geometry but still produces useful priority variation. Use low threshold (0.15) since mean priority is low (0.18). The windbreak trees will appear as a linear high-priority band — interesting edge case."
+    },
+    {
+      "name": "field_meadow",
+      "file": "field_meadow.jpg",
+      "description": "Single grass field with mowing/tractor tracks visible, irregular boundary with trees and bushes on all sides. Best candidate for field_mask demo.",
+      "source_size": [5472, 3648],
+      "recommended": {
+        "channel": "green",
+        "invert": false,
+        "target_size": 64,
+        "orientation_deg": 0,
+        "spray_threshold": 0.25
+      },
+      "notes": "The main value here is the irregular boundary — derive a field_mask by thresholding the green channel before passing to generate_strips(). The mow tracks create subtle row-like structure but variation is low overall."
+    },
+    {
+      "name": "field_paddies",
+      "file": "field_paddies.jpg",
+      "description": "Flooded rice paddy plots — waterlogged bare soil in rectangular plots, green vegetation borders and trees. Building with blue roof visible top-left.",
+      "source_size": [5472, 3648],
+      "recommended": {
+        "channel": "pseudo_ndvi",
+        "invert": true,
+        "target_size": 64,
+        "orientation_deg": 90,
+        "spray_threshold": 0.4
+      },
+      "notes": "Invert=True: bare flooded plots have low NDVI (= low priority after inversion means high priority without invert — use invert=False and threshold to keep green edges). Actually keep invert=True so green vegetation edges = high priority spray zones. High threshold (0.4) keeps only the dense green border areas. Shows well how drones would spray field margins and skip flooded centres."
+    }
+  ]
+}
