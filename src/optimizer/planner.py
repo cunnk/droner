@@ -1,5 +1,5 @@
 """
-Three-tier planner — the core Phase 2 contribution.
+Three-tier planner -- the core Phase 2 contribution.
 
 The system chooses between three modes based on context:
 
@@ -63,29 +63,29 @@ def select_mode(
     Heuristic mode selection.
 
     Rules (in priority order):
-    1. No active drones → heuristic (will be empty anyway)
-    2. No strips left   → heuristic
-    3. High uncertainty OR very tight budget → degraded
-    4. Problem large enough that MILP might be slow → degraded
-    5. Otherwise → full
+    1. No active drones -> heuristic (will be empty anyway)
+    2. No strips left   -> heuristic
+    3. High uncertainty OR very tight budget -> degraded
+    4. Problem large enough that MILP might be slow -> degraded
+    5. Otherwise -> full
 
-    These thresholds are intentionally conservative — the goal is that
+    These thresholds are intentionally conservative -- the goal is that
     FULL mode is only used when we're confident it will return quickly.
     """
     if n_drones == 0 or n_strips == 0:
         return PlannerMode.HEURISTIC
 
-    # High uncertainty → don't trust a long solve
+    # High uncertainty -> don't trust a long solve
     if context.uncertainty > 0.6:
         return PlannerMode.DEGRADED
 
-    # Very short budget → skip full solve
+    # Very short budget -> skip full solve
     if context.time_budget_seconds < 2.0:
         return PlannerMode.HEURISTIC
     if context.time_budget_seconds < 10.0:
         return PlannerMode.DEGRADED
 
-    # Large problem → probably slow
+    # Large problem -> probably slow
     if n_strips * n_drones > 200:
         return PlannerMode.DEGRADED
 

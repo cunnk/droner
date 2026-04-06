@@ -1,12 +1,12 @@
 """
-MCP tool implementations — plain Python functions.
+MCP tool implementations -- plain Python functions.
 
 Importable directly from notebooks or tests without starting the MCP server.
 The MCP server (server.py) wraps these same functions as Claude-callable tools.
 
 Separation of concerns:
-  tools.py  — logic (what each tool does)
-  server.py — protocol (how Claude calls them)
+  tools.py  -- logic (what each tool does)
+  server.py -- protocol (how Claude calls them)
 """
 from __future__ import annotations
 
@@ -181,7 +181,7 @@ def create_plan(
     time_limit_s: float = 10.0,
     objective_mode: str = "makespan",
 ) -> dict:
-    """Assign strips to drones using the three-tier planner (MILP → degraded → heuristic).
+    """Assign strips to drones using the three-tier planner (MILP -> degraded -> heuristic).
 
     objective_mode: "makespan" (balanced) or "weighted" (priority-first).
     """
@@ -208,7 +208,7 @@ def run_simulation(
 ) -> dict:
     """Execute the simulation with the current plan. Stores state history in session.
 
-    max_timesteps: hard stop — simulation ends at this timestep regardless of
+    max_timesteps: hard stop -- simulation ends at this timestep regardless of
     mission completion. Use this to enforce a storm deadline ("pencils down").
     """
     session = state_store.get_run(run_id)
@@ -247,7 +247,7 @@ def run_weather_aware_simulation(
 
     Timeline:
       t=0               : mission starts (identical to baseline up to notice_timestep)
-      t=notice_timestep : weather alert fires — each drone's remaining queue is
+      t=notice_timestep : weather alert fires -- each drone's remaining queue is
                           reordered by priority so the most critical strips are
                           sprayed first in the time that remains.
       t=storm_timestep  : storm arrives, simulation stops ("pencils down").
@@ -408,7 +408,7 @@ def get_field_events(
     ]
     hint = (
         f"{len(filtered)} events in t=[{since_timestep}, "
-        f"{until_timestep if until_timestep is not None else '∞'}]. "
+        f"{until_timestep if until_timestep is not None else 'inf'}]. "
         "For each event: call find_strips_at(row, col) to identify affected "
         "strips, then update_planner_params() and reoptimize()."
     ) if filtered else "No new field events in this window."
@@ -468,7 +468,7 @@ def update_planner_params(
                                queue in the next plan regardless of makespan balance.
     exclude_strip_ids        : strips to drop entirely (no-spray zones, already handled).
 
-    Changes accumulate — calling twice merges lists rather than replacing them.
+    Changes accumulate -- calling twice merges lists rather than replacing them.
     Call reoptimize() after this to apply the new parameters.
     """
     session = state_store.get_run(run_id)
@@ -517,13 +517,13 @@ def reoptimize(run_id: str) -> dict:
     grid      = history[-1]["grid"]
     strip_map = {s.id: s for s in session["strips"]}
 
-    # Strips whose spray_cells are all CELL_COMPLETE — skip these
+    # Strips whose spray_cells are all CELL_COMPLETE -- skip these
     completed_ids = {
         s.id for s in session["strips"]
         if all(grid[r][c] == _CELL_COMPLETE for (r, c) in s.spray_cells)
     }
 
-    # Strips a drone is actively mid-spray — let it finish, don't reassign
+    # Strips a drone is actively mid-spray -- let it finish, don't reassign
     active_strip_ids = {
         d["current_strip"]
         for d in history[-1]["drones"]
@@ -603,9 +603,9 @@ def run_simulation_until(
     preserved for visualisation and metrics.
 
     This is the engine of the chunked loop:
-      run_simulation_until(run_id, NOTICE_T)   → first chunk
+      run_simulation_until(run_id, NOTICE_T)   -> first chunk
       ...Claude replans via reoptimize()...
-      run_simulation_until(run_id, STORM_T)    → second chunk (resumes)
+      run_simulation_until(run_id, STORM_T)    -> second chunk (resumes)
     """
     session = state_store.get_run(run_id)
     if session["result"] is None:
@@ -645,7 +645,7 @@ def get_state(run_id: str) -> dict:
     session = state_store.get_run(run_id)
     history = session.get("state_history")
     if not history:
-        return {"run_id": run_id, "status": "no simulation run yet — call run_simulation first"}
+        return {"run_id": run_id, "status": "no simulation run yet -- call run_simulation first"}
 
     last = history[-1]
     cov = _coverage_from_grid(last["grid"])
@@ -701,7 +701,7 @@ def get_metrics(run_id: str, deadline_timestep: Optional[int] = None) -> dict:
               for k, v in metrics.items()
               if not isinstance(v, (list, dict))}
 
-    # Mandatory coverage — check if each mandatory strip's spray_cells are all complete
+    # Mandatory coverage -- check if each mandatory strip's spray_cells are all complete
     mandatory_ids = set(session.get("mandatory_strip_ids", []))
     if mandatory_ids:
         final_grid = history[-1]["grid"]
@@ -727,7 +727,7 @@ def get_weather_alert() -> dict:
 
 def arm_weather_alert(
     minutes_remaining: float,
-    description: str = "Storm approaching — mission window closing",
+    description: str = "Storm approaching -- mission window closing",
 ) -> dict:
     """Arm a simulated weather alert. Claude should respond by calling replan_with_deadline."""
     weather.arm_alert(minutes_remaining, description)
@@ -742,7 +742,7 @@ def arm_weather_alert(
 def trim_plan_to_deadline(run_id: str, time_budget_seconds: float) -> dict:
     """Trim the existing plan's assignment to fit within a deadline, preserving current strip order.
 
-    Unlike replan_with_deadline, this does NOT re-optimize or re-sort by priority —
+    Unlike replan_with_deadline, this does NOT re-optimize or re-sort by priority --
     it just cuts each drone's strip list once the budget runs out. Use this to apply
     the same deadline to a makespan-optimized plan for a fair benchmark comparison.
     """
@@ -772,7 +772,7 @@ def trim_plan_to_deadline(run_id: str, time_budget_seconds: float) -> dict:
 def reorder_by_priority(run_id: str) -> dict:
     """Reorder each drone's assigned strips highest-priority first.
 
-    Does NOT change which strips are assigned or how many — only their order.
+    Does NOT change which strips are assigned or how many -- only their order.
     Both Run A and Run B attempt the same strips; the difference is sequence.
     Measure coverage at the deadline timestep (not mission end) to see the lift.
 
@@ -797,7 +797,7 @@ def reorder_by_priority(run_id: str) -> dict:
         "strips_reordered": total,
         "top3_priorities": sorted(priorities, reverse=True)[:3],
         "note": (
-            "Assignment unchanged — strips reordered priority-first per drone. "
+            "Assignment unchanged -- strips reordered priority-first per drone. "
             "Run run_simulation, then compare get_metrics(deadline_timestep=N) vs baseline."
         ),
     }
@@ -810,7 +810,7 @@ def prioritize_within_deadline(
     """Trim the existing plan to the deadline then reorder each drone's strips
     by priority (highest first).
 
-    Critically, this does NOT change *which* strips are assigned — only their
+    Critically, this does NOT change *which* strips are assigned -- only their
     order. This makes the benchmark fair: Run A and Run B cover the same strips
     within the same deadline, but Run B tackles the most important ones first.
 
@@ -884,7 +884,7 @@ def replan_with_deadline(
     # that genuinely fits within the deadline is assigned.
     strip_by_id = {s.id: s for s in session["strips"]}
     for drone_id, strip_ids in result.assignment.items():
-        # Preserve priority order (weighted objective already sorts high→low)
+        # Preserve priority order (weighted objective already sorts high->low)
         ordered = sorted(strip_ids, key=lambda sid: strip_by_id[sid].priority, reverse=True)
         kept, budget = [], time_budget_seconds
         for sid in ordered:
@@ -1003,7 +1003,7 @@ def load_reforestation_field(
     seeds_cell  = sim_params["seeds_per_cell"]
     jitter      = cfg.seed_jitter_sigma
 
-    # Initial tidal grid — all dry
+    # Initial tidal grid -- all dry
     tidal_grid = np.zeros((nrows, ncols), dtype=np.float32)
 
     drones = [
@@ -1079,8 +1079,8 @@ def report_tidal_change(
     Args:
         run_id: Session ID from load_reforestation_field.
         region: Flooded zone, one of:
-            {"rows": [r_min, r_max], "cols": [c_min, c_max]}  — bounding box
-            {"type": "full_field"}                             — entire field
+            {"rows": [r_min, r_max], "cols": [c_min, c_max]}  -- bounding box
+            {"type": "full_field"}                             -- entire field
         tidal_level: Water level in this region (0=dry, 1=fully submerged).
             Cells with tidal_level >= tidal_threshold are excluded from planting.
         tidal_threshold: Exclusion cutoff (default 0.6 = significant flooding).
@@ -1108,7 +1108,7 @@ def report_tidal_change(
         c_max = int(region.get("cols", [0, ncols])[1])
         tidal_grid[r_min:r_max, c_min:c_max] = float(tidal_level)
 
-    # Re-mask: soil ∩ (tidal < threshold)
+    # Re-mask: soil & (tidal < threshold)
     updated_mask = apply_tidal_mask(base_mask, tidal_grid, tidal_threshold)
 
     # Regenerate strips with updated mask
@@ -1135,7 +1135,7 @@ def report_tidal_change(
         soil_mask   = updated_mask,
         tidal_grid  = tidal_grid,
         strips      = new_strips,
-        result      = None,   # plan is stale — caller must reoptimize
+        result      = None,   # plan is stale -- caller must reoptimize
         state_history = session.get("state_history"),  # preserve history so far
     )
 
@@ -1162,7 +1162,7 @@ def report_wind_change(
 
     Updates battery_drain_per_cell and seed_jitter_sigma in the session.
     These are picked up automatically by the next run_simulation_until()
-    chunk — no replanning required unless the battery impact is severe.
+    chunk -- no replanning required unless the battery impact is severe.
 
     Args:
         run_id: Session ID from load_reforestation_field.
@@ -1205,7 +1205,7 @@ def report_wind_change(
         "Picked up automatically by the next run_simulation_until() chunk."
     )
     if wind_speed_ms >= 15.0:
-        note += " WARNING: wind >= 15 m/s may compromise seed accuracy — consider pausing mission."
+        note += " WARNING: wind >= 15 m/s may compromise seed accuracy -- consider pausing mission."
 
     return {
         "run_id":                      run_id,
@@ -1226,7 +1226,7 @@ def enable_contour_planting(
 
     Contour strips hug tidal channel edges, producing sinuous paths that
     mimic natural mangrove forest growth rather than industrial grid rows.
-    Uses a distance-transform of the soil mask — O(n), no extra image
+    Uses a distance-transform of the soil mask -- O(n), no extra image
     processing needed.
 
     Requires load_reforestation_field() to have been called (needs soil_mask).

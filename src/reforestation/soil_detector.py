@@ -3,11 +3,11 @@ Soil detection for reforestation drone missions.
 
 detect_soil_mask()
 ------------------
-Takes an aerial RGB image and returns a boolean mask of *plantable* cells —
+Takes an aerial RGB image and returns a boolean mask of *plantable* cells --
 exposed mudflat / bare soil where seeds can take root.  Non-plantable areas:
 
   * Open water / tidal channels : high blue channel, low green
-  * Existing canopy              : high pseudo-NDVI (green − red / green + red)
+  * Existing canopy              : high pseudo-NDVI (green - red / green + red)
   * Submerged mudflat            : classified as water (see tidal_threshold)
 
 The returned mask plugs directly into generate_strips() via the existing
@@ -24,27 +24,27 @@ Detection approach
 Mangrove mudflat imagery typically shows three spectrally distinct zones:
 
   Zone            | NDVI          | Blue channel  | Brightness
-  ────────────────┼───────────────┼───────────────┼────────────
+  ----------------+---------------+---------------+------------
   Open water      | HIGH (teal)   | HIGH          | moderate
   Exposed soil    | near-zero     | moderate      | HIGH (pale)
   Existing canopy | near-zero     | low           | LOW (dark)
 
-Three signal cuts — any combination can be used depending on the image:
-  1. pseudo_ndvi < soil_ndvi_threshold       →  eliminates water (greenish-teal)
-  2. blue_norm   < water_blue_threshold      →  eliminates open water
-  3. brightness  > min_brightness_threshold  →  eliminates dark canopy
+Three signal cuts -- any combination can be used depending on the image:
+  1. pseudo_ndvi < soil_ndvi_threshold       ->  eliminates water (greenish-teal)
+  2. blue_norm   < water_blue_threshold      ->  eliminates open water
+  3. brightness  > min_brightness_threshold  ->  eliminates dark canopy
 
 In many coastal mangrove scenes, existing canopy has brownish-dark coloration
 (near-zero NDVI, similar to bare soil) and **brightness** is the primary signal
 that separates it from pale exposed mudflat.  Set min_brightness_threshold
-(e.g. 0.40–0.50) to activate this cut; default 0.0 = disabled.
+(e.g. 0.40-0.50) to activate this cut; default 0.0 = disabled.
 
 Tuning guidance
 ---------------
 * If the mask over-includes water: lower water_blue_threshold (e.g. 0.40)
-  OR rely on NDVI cut (water is often greenish → NDVI > 0.15)
-* If the mask over-includes dark canopy: raise min_brightness_threshold (0.40–0.50)
-* If the mask over-excludes healthy bare soil: raise soil_ndvi_threshold (0.20–0.25)
+  OR rely on NDVI cut (water is often greenish -> NDVI > 0.15)
+* If the mask over-includes dark canopy: raise min_brightness_threshold (0.40-0.50)
+* If the mask over-excludes healthy bare soil: raise soil_ndvi_threshold (0.20-0.25)
 * For upland / non-mangrove scenes: set water_blue_threshold=1.0 and
   min_brightness_threshold=0.0, rely on NDVI alone
 
@@ -61,7 +61,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
-# Lazy import — ingest.py is in the same project; this avoids a hard
+# Lazy import -- ingest.py is in the same project; this avoids a hard
 # circular dependency if callers import both modules.
 from src.field.ingest import load_image_as_array
 
@@ -79,7 +79,7 @@ def load_field_image(
 
     Unlike load_image_as_array() which forces a square centre-crop, this function
     stretches the image to fill the target grid exactly.  Use this for non-square
-    fields (e.g. 500 m wide × 300 m tall → ncols=64, nrows=38).
+    fields (e.g. 500 m wide x 300 m tall -> ncols=64, nrows=38).
 
     Parameters
     ----------
@@ -115,7 +115,7 @@ def detect_soil_mask(
         Path to the aerial photograph (JPG, PNG, TIFF, etc.).
     target_size:
         Square output resolution when nrows/ncols are not specified.
-        The image is centre-cropped then downsampled to target_size × target_size.
+        The image is centre-cropped then downsampled to target_size x target_size.
     soil_ndvi_threshold:
         Cells with pseudo-NDVI *above* this value are classified as existing
         canopy / water and excluded.  Default 0.15.  Teal water often has
@@ -126,9 +126,9 @@ def detect_soil_mask(
     min_brightness_threshold:
         Cells with perceptual luminance *below* this value are excluded as
         dark canopy (brownish-dark mangrove).  Default 0.0 = disabled.
-        Set to 0.40–0.50 for coastal mangrove imagery where existing canopy
+        Set to 0.40-0.50 for coastal mangrove imagery where existing canopy
         has near-zero NDVI but is visually much darker than bare mudflat.
-        Luminance = 0.299·R + 0.587·G + 0.114·B.
+        Luminance = 0.299*R + 0.587*G + 0.114*B.
     min_patch_cells:
         Minimum connected-region size (cells) to retain as plantable.
         Tiny isolated soil pixels (noise, artefacts) are removed.  Set to 1
@@ -250,9 +250,9 @@ def apply_tidal_mask(
     Parameters
     ----------
     base_soil_mask:
-        Boolean array (H × W) from detect_soil_mask() or a previous call.
+        Boolean array (H x W) from detect_soil_mask() or a previous call.
     tidal_grid:
-        Float array (H × W), same shape as base_soil_mask.
+        Float array (H x W), same shape as base_soil_mask.
         Values: 0.0 = dry, 1.0 = fully inundated.
         Can be a synthetic array or derived from sensor / remote-sensing data.
     tidal_threshold:
@@ -360,18 +360,18 @@ def plot_soil_detection(
     n_panels = 4
     fig, axes = plt.subplots(1, n_panels, figsize=figsize)
 
-    # Panel 1 — RGB
+    # Panel 1 -- RGB
     axes[0].imshow(img_rgb, aspect="auto")
     axes[0].set_title("Aerial Image (RGB)")
     axes[0].axis("off")
 
-    # Panel 2 — pseudo-NDVI heatmap
+    # Panel 2 -- pseudo-NDVI heatmap
     im1 = axes[1].imshow(pseudo_ndvi, cmap="RdYlGn", vmin=-0.3, vmax=0.5, aspect="auto")
     axes[1].set_title(f"Pseudo-NDVI\n(NDVI threshold = {soil_ndvi_threshold})")
     axes[1].axis("off")
     plt.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
 
-    # Panel 3 — Brightness heatmap
+    # Panel 3 -- Brightness heatmap
     im2 = axes[2].imshow(brightness, cmap="YlOrBr", vmin=0, vmax=1, aspect="auto")
     axes[2].set_title(
         f"Perceptual Brightness\n"
@@ -381,7 +381,7 @@ def plot_soil_detection(
     axes[2].axis("off")
     plt.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
 
-    # Panel 4 — soil mask
+    # Panel 4 -- soil mask
     cmap_mask = mcolors.ListedColormap(["#a8d5e2", "#c8a97a"])
     axes[3].imshow(soil_mask.astype(np.uint8), cmap=cmap_mask, vmin=0, vmax=1, aspect="auto")
     detail = (
@@ -398,9 +398,9 @@ def plot_soil_detection(
     ]
     axes[3].legend(handles=legend_elements, loc="lower right", fontsize=8, framealpha=0.85)
 
-    grid_str = f"{meta['grid_shape'][0]}×{meta['grid_shape'][1]}"
+    grid_str = f"{meta['grid_shape'][0]}x{meta['grid_shape'][1]}"
     fig.suptitle(
-        f"Soil Detection — Reforestation Mission  ({grid_str} grid)",
+        f"Soil Detection -- Reforestation Mission  ({grid_str} grid)",
         fontsize=12, y=1.01,
     )
     fig.tight_layout()
@@ -415,7 +415,7 @@ def _remove_small_patches(mask: np.ndarray, min_size: int) -> np.ndarray:
     """Remove connected True-regions smaller than min_size cells.
 
     Uses a simple flood-fill (BFS) rather than scipy to avoid adding a
-    mandatory dependency.  Fast enough for grids ≤ 256 × 256.
+    mandatory dependency.  Fast enough for grids <= 256 x 256.
     """
     if min_size <= 1:
         return mask.copy()

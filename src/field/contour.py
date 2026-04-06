@@ -2,7 +2,7 @@
 Contour-following strip generator for mangrove reforestation.
 
 Replaces the boustrophedon (lawnmower) approach with strips that hug
-tidal channel edges — mirroring how mangroves naturally colonise mudflats
+tidal channel edges -- mirroring how mangroves naturally colonise mudflats
 from the water margin inward.
 
 Algorithm
@@ -13,7 +13,7 @@ Algorithm
 
 2. Bucket plantable cells into distance bands of width `strip_width`.
    Band 0 = cells at the tidal margin (distance < strip_width).
-   Band k = cells strip_width*k ≤ dist < strip_width*(k+1).
+   Band k = cells strip_width*k <= dist < strip_width*(k+1).
 
 3. Within each band, order cells by their angle relative to the band's
    centroid.  This traces the perimeter of the ring, producing a sinuous
@@ -53,11 +53,11 @@ def generate_contour_strips(
     Parameters
     ----------
     soil_mask:
-        Boolean array (nrows × ncols).  True = plantable mudflat.
+        Boolean array (nrows x ncols).  True = plantable mudflat.
         Typically the output of ``detect_soil_mask()`` from
         ``src.reforestation.soil_detector``.
     priority_grid:
-        Float array (nrows × ncols) in [0, 1].  Used to compute strip
+        Float array (nrows x ncols) in [0, 1].  Used to compute strip
         priority and spray time.  Pass the ``soil_priority_grid`` returned
         by ``detect_soil_mask()``.
     strip_width:
@@ -88,9 +88,9 @@ def generate_contour_strips(
 
     Notes
     -----
-    strip_width=1  — maximum sinuosity; many small strips, slower MILP
-    strip_width=2  — recommended: smooth curves, ~30–50 strips for 64×38
-    strip_width=3  — wider swaths, less curve detail, faster MILP
+    strip_width=1  -- maximum sinuosity; many small strips, slower MILP
+    strip_width=2  -- recommended: smooth curves, ~30-50 strips for 64x38
+    strip_width=3  -- wider swaths, less curve detail, faster MILP
     """
     soil = soil_mask.astype(bool)
 
@@ -104,12 +104,12 @@ def generate_contour_strips(
     for band_start in range(0, max_d + strip_width, strip_width):
         band_end = band_start + strip_width
         in_band = (dist >= band_start) & (dist < band_end) & soil
-        coords = np.argwhere(in_band)   # shape (N, 2) — [row, col]
+        coords = np.argwhere(in_band)   # shape (N, 2) -- [row, col]
 
         if len(coords) < min_cells:
             continue
 
-        # Order cells to stay geographically local — boustrophedon within the band.
+        # Order cells to stay geographically local -- boustrophedon within the band.
         # Angle-sorting around the centroid was tried but produces large jumps
         # (mean 6 cells, max 25) because the centroid often lands in open water
         # for a coastal mudflat, making the angle assignment meaningless.

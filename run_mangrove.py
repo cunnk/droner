@@ -21,18 +21,18 @@ from src.viz.renderer                import animate
 
 IMG_PATH = 'aerial_mangrove_images/screenshot1.jpg'
 
-# ── Field dimensions ──────────────────────────────────────────────────────
+# -- Field dimensions ------------------------------------------------------
 FIELD_W_M = 500   # metres wide
 FIELD_H_M = 300   # metres tall
 NCOLS = 64
 NROWS = int(round(NCOLS * FIELD_H_M / FIELD_W_M))   # 38
 print(f'Grid: {NCOLS}x{NROWS}  ({FIELD_W_M/NCOLS:.1f}m x {FIELD_H_M/NROWS:.1f}m per cell)')
 
-# ── Soil detection ────────────────────────────────────────────────────────
+# -- Soil detection --------------------------------------------------------
 # Thresholds calibrated from pixel sampling:
-#   Water (teal):  NDVI=0.22, Blue=0.56  → excluded by NDVI threshold
-#   Mudflat (tan): NDVI=-0.00, Blue=0.44, Brightness=0.57  → plantable
-#   Canopy (dark): NDVI=-0.02, Blue=0.28, Brightness=0.39  → excluded by brightness
+#   Water (teal):  NDVI=0.22, Blue=0.56  -> excluded by NDVI threshold
+#   Mudflat (tan): NDVI=-0.00, Blue=0.44, Brightness=0.57  -> plantable
+#   Canopy (dark): NDVI=-0.02, Blue=0.28, Brightness=0.39  -> excluded by brightness
 soil_mask, priority_grid, meta = detect_soil_mask(
     IMG_PATH,
     nrows=NROWS, ncols=NCOLS,
@@ -46,7 +46,7 @@ print('Detection results:')
 for k, v in meta.items():
     print(f'  {k}: {v}')
 
-# ── Diagnostic plot ───────────────────────────────────────────────────────
+# -- Diagnostic plot -------------------------------------------------------
 img_rgb = load_field_image(IMG_PATH, nrows=NROWS, ncols=NCOLS)
 R = img_rgb[:,:,0].astype(np.float32) / 255.0
 G = img_rgb[:,:,1].astype(np.float32) / 255.0
@@ -83,13 +83,13 @@ axes[3].legend(handles=[
     Patch(facecolor='#a8d5e2', label='Skip (water/canopy)'),
 ], loc='lower right', fontsize=7)
 
-plt.suptitle(f'Soil Detection — Abu Dhabi Mangrove ({NCOLS}x{NROWS} grid)', fontsize=12)
+plt.suptitle(f'Soil Detection -- Abu Dhabi Mangrove ({NCOLS}x{NROWS} grid)', fontsize=12)
 plt.tight_layout()
 plt.savefig('results/phase5_soil_detection.png', dpi=150, bbox_inches='tight')
 print('Saved: results/phase5_soil_detection.png')
 plt.close()
 
-# ── Mission config ────────────────────────────────────────────────────────
+# -- Mission config --------------------------------------------------------
 cfg = MissionConfig(
     seed_capacity         = 6000,
     seed_spacing_m        = 1.5,
@@ -99,12 +99,12 @@ cfg = MissionConfig(
     recharge_time_seconds = 3600.0,
     n_drones              = 3,
     dock_positions        = [(0, 0)],
-    name                  = 'Mangrove Reforestation — Abu Dhabi',
+    name                  = 'Mangrove Reforestation -- Abu Dhabi',
 )
 params = compute_sim_params(cfg, ncols=NCOLS)
 print_mission_summary(cfg, ncols=NCOLS)
 
-# ── Strips ────────────────────────────────────────────────────────────────
+# -- Strips ----------------------------------------------------------------
 # Contour mode: distance-transform rings that hug tidal channel boundaries.
 # max_cells_per_strip keeps each strip within one hopper load so the drone
 # advances through the strip without replaying the beginning after each refill.
@@ -112,7 +112,7 @@ hopper_cells = int(cfg.seed_capacity / params['seeds_per_cell'])   # ~221 cells
 strips = generate_contour_strips(
     soil_mask,
     priority_grid,
-    strip_width          = 1,          # finest rings — maximum sinuosity
+    strip_width          = 1,          # finest rings -- maximum sinuosity
     seconds_per_cell     = cfg.seconds_per_cell,
     max_cells_per_strip  = hopper_cells - 10,  # small safety margin
 )
@@ -120,12 +120,12 @@ total_spray = sum(len(s.spray_cells) for s in strips)
 transit_only = sum(len(s.cells) - len(s.spray_cells) for s in strips)
 print(f'Contour strips: {len(strips)}   Plantable cells: {total_spray}   Transit-only: {transit_only}')
 
-# ── Assignment ────────────────────────────────────────────────────────────
+# -- Assignment ------------------------------------------------------------
 drones = [DroneSpec(id=i, seed_capacity=cfg.seed_capacity) for i in range(cfg.n_drones)]
 result = assign_strips(strips, drones, objective_mode='makespan')
 print(f'MILP: {result.status}  makespan={result.makespan:.0f}s  solve={result.solve_time:.2f}s')
 
-# ── Simulation ────────────────────────────────────────────────────────────
+# -- Simulation ------------------------------------------------------------
 print('Simulating...')
 history = simulate(
     strips, drones, result, NROWS, NCOLS,
@@ -140,7 +140,7 @@ print(f'Simulation: {len(history)} timesteps')
 hopper_events = [s for s in history if s.get('event') and 'seed hopper' in s['event']]
 print(f'Hopper-empty refill stops: {len(hopper_events)}')
 
-# ── Metrics ───────────────────────────────────────────────────────────────
+# -- Metrics ---------------------------------------------------------------
 m = compute_reforestation_metrics(
     history, strips, NROWS, NCOLS,
     meters_per_cell = params['meters_per_cell'],
@@ -148,7 +148,7 @@ m = compute_reforestation_metrics(
 )
 print_reforestation_summary(m, cfg)
 
-# ── Animation with aerial overlay ─────────────────────────────────────────
+# -- Animation with aerial overlay -----------------------------------------
 print('Rendering GIF...')
 FRAME_SKIP = max(1, len(history) // 150)
 gif_hist   = history[::FRAME_SKIP]
@@ -170,7 +170,7 @@ anim = animate(
 )
 print(f'GIF: results/phase5_contour_mangrove.gif ({len(gif_hist)} frames)')
 
-# ── Seed drop visualisation ───────────────────────────────────────────────
+# -- Seed drop visualisation -----------------------------------------------
 fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
 
 # Left: seed cloud on aerial photo
@@ -202,7 +202,7 @@ plt.colorbar(im3, ax=axes2[1], fraction=0.046, label='Seeds/cell')
 
 total_drops = len(all_xs)
 plt.suptitle(
-    f'Non-Linear Seed Dispersal — Abu Dhabi Mangrove\n'
+    f'Non-Linear Seed Dispersal -- Abu Dhabi Mangrove\n'
     f'{total_drops:,} total drops  |  '
     f'{m.get("total_seeds_planted",0):,} seeds planted  |  '
     f'{m.get("total_area_covered_m2",0):,.0f} m2 covered',

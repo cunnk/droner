@@ -1,5 +1,5 @@
 """
-Drone Fleet Coordinator — MCP Server
+Drone Fleet Coordinator -- MCP Server
 
 Exposes the fleet optimizer and simulation as Claude-callable tools.
 
@@ -8,7 +8,7 @@ Architecture
 Ground station runs this server. Claude (via Claude Code or the Anthropic
 API) connects and can:
   1. Load a field image and generate spray strips
-  2. Plan a mission (MILP → degraded → heuristic automatically)
+  2. Plan a mission (MILP -> degraded -> heuristic automatically)
   3. Run the simulation
   4. Monitor a weather feed for incoming storms
   5. Replan with a priority-weighted deadline when a storm is approaching
@@ -22,7 +22,7 @@ Start the server (stdio transport, for use with Claude Code):
     python -m src.mcp.server
 
 Add to Claude Code:
-    In .claude/settings.json → "mcpServers":
+    In .claude/settings.json -> "mcpServers":
     {
       "drone-fleet": {
         "command": "python",
@@ -34,7 +34,7 @@ Add to Claude Code:
 Fallback behavior
 -----------------
 If this coordinator becomes unreachable (link drop, timeout), each drone's
-onboard system falls back to the three-tier planner's heuristic mode —
+onboard system falls back to the three-tier planner's heuristic mode --
 already implemented in src/optimizer/planner.py. This is the correct
 architecture for real ag autonomy: LLM at the coordinator, local heuristic
 as the emergency fallback.
@@ -49,7 +49,7 @@ mcp = FastMCP(
         "Use these tools to load field data, plan missions, run simulations, and respond to "
         "weather alerts. When get_weather_alert returns an active alert, you must call "
         "replan_with_deadline to maximize coverage of high-priority strips before the storm "
-        "arrives — then run the simulation again with the new plan."
+        "arrives -- then run the simulation again with the new plan."
     ),
 )
 
@@ -84,7 +84,7 @@ def load_field(
 
     Args:
         image_path: Path to the field image (JPG, PNG, GeoTIFF).
-        target_size: Downsample target (e.g. 32 → 32x32 grid).
+        target_size: Downsample target (e.g. 32 -> 32x32 grid).
         channel: Spectral channel to use as priority proxy ('green', 'pseudo_ndvi', 'grayscale').
         orientation_deg: Strip alignment angle in degrees (0=horizontal, 90=vertical).
         seconds_per_cell: Simulated spray time per grid cell.
@@ -102,13 +102,13 @@ def create_plan(
 ) -> dict:
     """Assign strips to drones using the three-tier planner.
 
-    The planner automatically selects Full MILP → Degraded MILP → Heuristic
+    The planner automatically selects Full MILP -> Degraded MILP -> Heuristic
     based on available time and problem size.
 
     Args:
         run_id: Session ID from load_field.
         n_drones: Number of drones in the fleet.
-        battery: Starting battery level (0–100).
+        battery: Starting battery level (0-100).
         time_limit_s: Solver time budget in seconds.
         objective_mode: 'makespan' (balanced workload) or 'weighted' (priority-first).
     """
@@ -156,11 +156,11 @@ def get_metrics(run_id: str) -> dict:
     """Compute operator metrics for the completed simulation.
 
     Key metrics:
-      coverage_pct        — % of field cells sprayed
-      priority_coverage   — weighted coverage (high-priority strips count more)
-      makespan            — total mission duration in timesteps
-      replan_count        — number of replanning events triggered
-      time_to_recovery    — timesteps between first failure and full replanning
+      coverage_pct        -- % of field cells sprayed
+      priority_coverage   -- weighted coverage (high-priority strips count more)
+      makespan            -- total mission duration in timesteps
+      replan_count        -- number of replanning events triggered
+      time_to_recovery    -- timesteps between first failure and full replanning
 
     Args:
         run_id: Session ID from load_field.
@@ -182,7 +182,7 @@ def get_weather_alert() -> dict:
 @mcp.tool()
 def arm_weather_alert(
     minutes_remaining: float,
-    description: str = "Storm approaching — mission window closing",
+    description: str = "Storm approaching -- mission window closing",
 ) -> dict:
     """Arm a simulated weather alert (for testing and demos).
 
@@ -252,10 +252,10 @@ def load_reforestation_field(
         image_path: Path to aerial photograph (JPG, PNG).
         field_width_m: Real-world field width in metres.
         field_height_m: Real-world field height in metres.
-        target_ncols: Grid resolution — columns (rows derived from aspect ratio).
-        soil_ndvi_threshold: NDVI >= this → existing vegetation, not plantable.
-        water_blue_threshold: Blue channel >= this → water channel, not plantable.
-        min_brightness_threshold: Brightness < this → existing canopy, not plantable.
+        target_ncols: Grid resolution -- columns (rows derived from aspect ratio).
+        soil_ndvi_threshold: NDVI >= this -> existing vegetation, not plantable.
+        water_blue_threshold: Blue channel >= this -> water channel, not plantable.
+        min_brightness_threshold: Brightness < this -> existing canopy, not plantable.
             Critical for separating dark mangrove canopy from mudflat (both have
             near-zero NDVI).
         wind_speed_ms: Initial wind speed for battery and dispersal modelling.
@@ -263,8 +263,8 @@ def load_reforestation_field(
         seed_spacing_m: Target metres between planted seeds.
         seed_capacity: Seeds per drone per charge (Distant Imagery: 6,000).
         n_drones: Fleet size.
-        planting_mode: 'contour' — sinuous tidal-channel-following strips;
-            'boustrophedon' — standard lawnmower rows.
+        planting_mode: 'contour' -- sinuous tidal-channel-following strips;
+            'boustrophedon' -- standard lawnmower rows.
         contour_strip_width: Band width in cells per strip (contour mode).
             2 = recommended balance of sinuosity and MILP speed.
         seconds_per_cell: Simulation timesteps per grid cell.
@@ -299,8 +299,8 @@ def report_tidal_change(
     Args:
         run_id: Session ID from load_reforestation_field.
         region: The flooded zone, one of:
-            {"rows": [r_min, r_max], "cols": [c_min, c_max]}  — bounding box
-            {"type": "full_field"}                             — entire field
+            {"rows": [r_min, r_max], "cols": [c_min, c_max]}  -- bounding box
+            {"type": "full_field"}                             -- entire field
         tidal_level: Water level in this region (0=dry, 1=submerged).
             Cells where tidal_level >= tidal_threshold are excluded from planting.
         tidal_threshold: Exclusion cutoff (0.6 = significant flooding).
@@ -317,15 +317,15 @@ def report_wind_change(
     """Report a wind speed change and update battery drain and seed dispersal.
 
     Updates two session parameters that affect subsequent simulation chunks:
-      battery_drain_per_cell — increases with wind (more energy fighting headwind)
-      seed_jitter_sigma      — increases with wind (seeds scattered further on drop)
+      battery_drain_per_cell -- increases with wind (more energy fighting headwind)
+      seed_jitter_sigma      -- increases with wind (seeds scattered further on drop)
 
     No replanning required for moderate wind changes. The next
     run_simulation_until() chunk automatically uses the updated values.
 
     Seed physics note: Distant Imagery drones DROP seeds under gravity (no
     pneumatic cannon). Dispersal offset = forward drift during fall + wind drift.
-    At 5 m/s drone speed, 5 m altitude: fall_time ≈ 1 s, forward drift ≈ 5 m.
+    At 5 m/s drone speed, 5 m altitude: fall_time ~= 1 s, forward drift ~= 5 m.
     Wind adds proportionally to this.
 
     Args:
@@ -344,7 +344,7 @@ def enable_contour_planting(
 ) -> dict:
     """Switch to contour-following strip paths that mimic natural mangrove growth.
 
-    Replaces the current strip set with distance-transform contour strips —
+    Replaces the current strip set with distance-transform contour strips --
     each strip follows a ring of cells equidistant from the tidal channel edge.
     Outer rings (tidal margin) are planted first, matching natural mangrove
     colonisation direction.
@@ -361,7 +361,7 @@ def enable_contour_planting(
         run_id: Session ID from load_reforestation_field.
         strip_width: Distance-band width in cells per strip.
             1 = maximum sinuosity, many small strips (slower MILP)
-            2 = recommended — smooth curves, fewer strips (default)
+            2 = recommended -- smooth curves, fewer strips (default)
             3 = wider swaths, less curve detail, fastest MILP
     """
     return tools.enable_contour_planting(run_id, strip_width)

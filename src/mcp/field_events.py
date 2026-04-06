@@ -25,7 +25,7 @@ class FieldEvent:
     row: int
     col: int
     description: str
-    severity: float = 0.5  # 0–1; higher = more urgent
+    severity: float = 0.5  # 0-1; higher = more urgent
 
 
 def generate_event_feed(
@@ -42,7 +42,7 @@ def generate_event_feed(
 
     Events are biased toward the high-priority corner of the field (top-right
     for the elevation image) so they are likely to correspond to strips that
-    the baseline plan reaches late — making the MCP response meaningful.
+    the baseline plan reaches late -- making the MCP response meaningful.
 
     Parameters
     ----------
