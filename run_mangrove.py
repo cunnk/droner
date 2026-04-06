@@ -11,6 +11,7 @@ from matplotlib.patches import Patch
 from src.reforestation.config        import MissionConfig, compute_sim_params, print_mission_summary
 from src.reforestation.soil_detector import detect_soil_mask, load_field_image
 from src.field.generator             import generate_strips
+from src.field.contour               import generate_contour_strips
 from src.optimizer.milp              import DroneSpec, assign_strips
 from src.simulation.engine           import simulate
 from src.simulation.metrics          import (
@@ -104,16 +105,20 @@ params = compute_sim_params(cfg, ncols=NCOLS)
 print_mission_summary(cfg, ncols=NCOLS)
 
 # ── Strips ────────────────────────────────────────────────────────────────
-strips = generate_strips(
+# Contour mode: distance-transform rings that hug tidal channel boundaries.
+# max_cells_per_strip keeps each strip within one hopper load so the drone
+# advances through the strip without replaying the beginning after each refill.
+hopper_cells = int(cfg.seed_capacity / params['seeds_per_cell'])   # ~221 cells
+strips = generate_contour_strips(
+    soil_mask,
     priority_grid,
-    seconds_per_cell = cfg.seconds_per_cell,
-    orientation_deg  = 0,
-    spray_threshold  = 0.0,
-    field_mask       = soil_mask,
+    strip_width          = 1,          # finest rings — maximum sinuosity
+    seconds_per_cell     = cfg.seconds_per_cell,
+    max_cells_per_strip  = hopper_cells - 10,  # small safety margin
 )
 total_spray = sum(len(s.spray_cells) for s in strips)
 transit_only = sum(len(s.cells) - len(s.spray_cells) for s in strips)
-print(f'Strips: {len(strips)}   Plantable cells: {total_spray}   Transit-only: {transit_only}')
+print(f'Contour strips: {len(strips)}   Plantable cells: {total_spray}   Transit-only: {transit_only}')
 
 # ── Assignment ────────────────────────────────────────────────────────────
 drones = [DroneSpec(id=i, seed_capacity=cfg.seed_capacity) for i in range(cfg.n_drones)]
@@ -157,13 +162,13 @@ anim = animate(
     interval_ms       = 150,
     dock_positions    = cfg.dock_positions,
     background_image  = img_rgb,
-    save_path         = 'results/phase5_abu_dhabi_mangrove.gif',
+    save_path         = 'results/phase5_contour_mangrove.gif',
     show              = False,
     show_seed_drops   = True,
     mode_label        = cfg.name,
     n_plantable_cells = n_plantable,
 )
-print(f'GIF: results/phase5_abu_dhabi_mangrove.gif ({len(gif_hist)} frames)')
+print(f'GIF: results/phase5_contour_mangrove.gif ({len(gif_hist)} frames)')
 
 # ── Seed drop visualisation ───────────────────────────────────────────────
 fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))

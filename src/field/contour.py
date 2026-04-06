@@ -32,7 +32,7 @@ Why this beats the alternatives
 """
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 from scipy.ndimage import distance_transform_edt
@@ -46,6 +46,7 @@ def generate_contour_strips(
     strip_width: int = 2,
     seconds_per_cell: float = 2.0,
     min_cells: int = 3,
+    max_cells_per_strip: Optional[int] = None,
 ) -> List[Strip]:
     """Generate sinuous contour strips that hug tidal channel boundaries.
 
@@ -68,6 +69,16 @@ def generate_contour_strips(
     min_cells:
         Strips with fewer plantable cells than this threshold are discarded
         (avoids tiny isolated fragments clogging the optimizer).
+    max_cells_per_strip:
+        If set, any band with more cells than this limit is split into
+        consecutive sub-strips of at most this size.  Use this when
+        running with seed capacity enabled: set it to
+        ``int(seed_capacity / seeds_per_cell) - margin`` so each strip
+        fits within one hopper load.  The simulation engine resets a
+        drone's position within a strip when it returns to dock, so
+        strips longer than one hopper load will cause the drone to replay
+        the start of the strip on every refill rather than advancing.
+        ``None`` (default) = no splitting.
 
     Returns
     -------
@@ -113,17 +124,29 @@ def generate_contour_strips(
 
         cells: List[Tuple[int, int]] = [(int(r), int(c)) for r, c in ordered]
 
-        strip = _make_strip(
-            strip_id,
-            cells,
-            priority_grid,
-            seconds_per_cell,
-            orientation_deg=0.0,   # contour strips have no fixed orientation
-            spray_threshold=0.0,
-            field_mask=soil,
-        )
-        if strip is not None:
-            strips.append(strip)
-            strip_id += 1
+        # Split large bands into sub-strips so each fits within one hopper load.
+        # Without this, the engine's strip-restart-on-return behaviour causes the
+        # drone to loop over the first hopper-load of cells indefinitely.
+        if max_cells_per_strip and len(cells) > max_cells_per_strip:
+            chunks = [
+                cells[i : i + max_cells_per_strip]
+                for i in range(0, len(cells), max_cells_per_strip)
+            ]
+        else:
+            chunks = [cells]
+
+        for chunk in chunks:
+            strip = _make_strip(
+                strip_id,
+                chunk,
+                priority_grid,
+                seconds_per_cell,
+                orientation_deg=0.0,   # contour strips have no fixed orientation
+                spray_threshold=0.0,
+                field_mask=soil,
+            )
+            if strip is not None:
+                strips.append(strip)
+                strip_id += 1
 
     return strips
