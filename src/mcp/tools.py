@@ -12,10 +12,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import numpy as np
+
 from src.field.generator import generate_strips, synthetic_field
 from src.field.ingest import load_image_grid
+from src.field.contour import generate_contour_strips
 from src.optimizer.milp import DroneSpec
 from src.optimizer.planner import plan, PlannerContext
+from src.reforestation.config import MissionConfig, compute_sim_params, mangrove_preset
+from src.reforestation.soil_detector import detect_soil_mask, apply_tidal_mask
 from src.simulation.engine import simulate
 from src.simulation.metrics import compute_metrics
 from src.mcp import state_store, weather
@@ -902,5 +907,368 @@ def replan_with_deadline(
         "note": (
             f"Priority-weighted plan created within {time_budget_seconds}s deadline. "
             "Call run_simulation to execute the deadline-aware mission."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Reforestation tools
+# ---------------------------------------------------------------------------
+
+def load_reforestation_field(
+    image_path: str,
+    field_width_m: float = 500.0,
+    field_height_m: float = 300.0,
+    target_ncols: int = 64,
+    soil_ndvi_threshold: float = 0.12,
+    water_blue_threshold: float = 0.50,
+    min_brightness_threshold: float = 0.42,
+    wind_speed_ms: float = 0.0,
+    battery_life_minutes: float = 35.0,
+    seed_spacing_m: float = 1.5,
+    seed_capacity: int = 6000,
+    n_drones: int = 3,
+    planting_mode: str = "contour",
+    contour_strip_width: int = 2,
+    seconds_per_cell: float = 2.0,
+) -> dict:
+    """Load an aerial mangrove image and prepare a reforestation mission.
+
+    Detects plantable mudflat soil (soil mask) from the image, generates
+    strips in the chosen planting mode, and stores all session state
+    needed for tidal/wind updates.  Returns a run_id for all subsequent
+    tool calls.
+
+    Args:
+        image_path: Path to aerial photograph (JPG, PNG).
+        field_width_m: Real-world width of the field in metres.
+        field_height_m: Real-world height of the field in metres.
+        target_ncols: Grid columns (rows auto-derived from aspect ratio).
+        soil_ndvi_threshold: Pixels with pseudo-NDVI >= this are classified
+            as existing vegetation (excluded from planting).
+        water_blue_threshold: Pixels with blue channel >= this are water.
+        min_brightness_threshold: Pixels darker than this are treated as
+            existing canopy cover (excluded). Key for separating mudflat
+            from dark-canopy which share near-zero NDVI.
+        wind_speed_ms: Initial wind speed for battery/dispersal modelling.
+        battery_life_minutes: Full-charge flight duration per drone.
+        seed_spacing_m: Target metres between planted seeds.
+        seed_capacity: Seeds per drone per charge.
+        n_drones: Number of drones in the fleet.
+        planting_mode: 'contour' (sinuous tidal-channel-following) or
+            'boustrophedon' (standard lawnmower rows).
+        contour_strip_width: Band width in cells for contour mode.
+        seconds_per_cell: Simulation timesteps per grid cell.
+    """
+    aspect = field_height_m / max(field_width_m, 1.0)
+    nrows = max(4, round(target_ncols * aspect))
+    ncols = target_ncols
+
+    soil_mask, priority_grid_np, soil_meta = detect_soil_mask(
+        image_path,
+        soil_ndvi_threshold=soil_ndvi_threshold,
+        water_blue_threshold=water_blue_threshold,
+        min_brightness_threshold=min_brightness_threshold,
+        nrows=nrows,
+        ncols=ncols,
+    )
+
+    # Build strips in the requested planting mode
+    if planting_mode == "contour":
+        strips = generate_contour_strips(
+            soil_mask, priority_grid_np,
+            strip_width=contour_strip_width,
+            seconds_per_cell=seconds_per_cell,
+        )
+    else:
+        strips = generate_strips(
+            priority_grid_np.tolist(),
+            seconds_per_cell=seconds_per_cell,
+            field_mask=soil_mask,
+        )
+
+    # Derive mission physics parameters
+    cfg = MissionConfig(
+        field_width_m=field_width_m,
+        battery_life_minutes=battery_life_minutes,
+        seed_spacing_m=seed_spacing_m,
+        seed_capacity=seed_capacity,
+        wind_speed_ms=wind_speed_ms,
+        seconds_per_cell=seconds_per_cell,
+        n_drones=n_drones,
+    )
+    sim_params = compute_sim_params(cfg, ncols)
+    base_drain  = sim_params["battery_drain_per_cell"] / sim_params["wind_multiplier"]
+    drain       = sim_params["battery_drain_per_cell"]
+    seeds_cell  = sim_params["seeds_per_cell"]
+    jitter      = cfg.seed_jitter_sigma
+
+    # Initial tidal grid — all dry
+    tidal_grid = np.zeros((nrows, ncols), dtype=np.float32)
+
+    drones = [
+        DroneSpec(id=i, battery=100.0, spray_capacity=100.0, seed_capacity=seed_capacity)
+        for i in range(n_drones)
+    ]
+
+    run_id = state_store.new_run({
+        # Standard session keys
+        "image_path":            image_path,
+        "grid":                  priority_grid_np.tolist(),
+        "strips":                strips,
+        "nrows":                 nrows,
+        "ncols":                 ncols,
+        "meta":                  soil_meta,
+        "drones":                drones,
+        "result":                None,
+        "state_history":         None,
+        "mandatory_strip_ids":   [],
+        "must_complete_strip_ids": [],
+        "exclude_strip_ids":     [],
+        "planner_priority_weight": 0.5,
+        "field_events":          [],
+        # Reforestation-specific keys
+        "soil_mask":             soil_mask,
+        "base_soil_mask":        soil_mask.copy(),
+        "priority_grid_np":      priority_grid_np,
+        "tidal_grid":            tidal_grid,
+        "wind_speed_ms":         wind_speed_ms,
+        "base_battery_drain_per_cell": base_drain,
+        "battery_drain_per_cell": drain,
+        "seed_jitter_sigma":     jitter,
+        "seeds_per_cell":        seeds_cell,
+        "planting_mode":         planting_mode,
+        "contour_strip_width":   contour_strip_width,
+        "seconds_per_cell":      seconds_per_cell,
+        "field_width_m":         field_width_m,
+        "battery_life_minutes":  battery_life_minutes,
+    })
+
+    n_plantable = int(soil_mask.sum())
+    return {
+        "run_id":                     run_id,
+        "grid_shape":                 [nrows, ncols],
+        "plantable_cells":            n_plantable,
+        "total_cells":                nrows * ncols,
+        "plantable_pct":              round(100.0 * n_plantable / (nrows * ncols), 1),
+        "strips":                     _strip_summary(strips),
+        "planting_mode":              planting_mode,
+        "wind_speed_ms":              wind_speed_ms,
+        "battery_drain_per_cell":     round(drain, 4),
+        "seeds_per_cell":             round(seeds_cell, 2),
+        "note": (
+            f"{planting_mode} strips generated. "
+            "Call create_plan() then run_simulation_until() to begin the mission. "
+            "Use report_tidal_change() or report_wind_change() mid-mission as conditions change."
+        ),
+    }
+
+
+def report_tidal_change(
+    run_id: str,
+    region: dict,
+    tidal_level: float = 0.8,
+    tidal_threshold: float = 0.6,
+) -> dict:
+    """Report a tidal or moisture sensor reading that floods part of the field.
+
+    Updates the session tidal grid, re-applies the soil mask to exclude flooded
+    cells, and regenerates strips.  Call reoptimize() afterward to reassign the
+    revised strip set to the fleet.
+
+    Args:
+        run_id: Session ID from load_reforestation_field.
+        region: Flooded zone, one of:
+            {"rows": [r_min, r_max], "cols": [c_min, c_max]}  — bounding box
+            {"type": "full_field"}                             — entire field
+        tidal_level: Water level in this region (0=dry, 1=fully submerged).
+            Cells with tidal_level >= tidal_threshold are excluded from planting.
+        tidal_threshold: Exclusion cutoff (default 0.6 = significant flooding).
+    """
+    session   = state_store.get_run(run_id)
+    base_mask = session.get("base_soil_mask")
+    prio_grid = session.get("priority_grid_np")
+    if base_mask is None or prio_grid is None:
+        raise ValueError(
+            "No soil mask found. Call load_reforestation_field() first."
+        )
+
+    nrows = session["nrows"]
+    ncols = session["ncols"]
+
+    # Update tidal grid for the specified region
+    tidal_grid = session.get("tidal_grid", np.zeros((nrows, ncols), dtype=np.float32)).copy()
+
+    if region.get("type") == "full_field":
+        tidal_grid[:, :] = float(tidal_level)
+    else:
+        r_min = int(region.get("rows", [0, nrows])[0])
+        r_max = int(region.get("rows", [0, nrows])[1])
+        c_min = int(region.get("cols", [0, ncols])[0])
+        c_max = int(region.get("cols", [0, ncols])[1])
+        tidal_grid[r_min:r_max, c_min:c_max] = float(tidal_level)
+
+    # Re-mask: soil ∩ (tidal < threshold)
+    updated_mask = apply_tidal_mask(base_mask, tidal_grid, tidal_threshold)
+
+    # Regenerate strips with updated mask
+    n_strips_before = len(session["strips"])
+    mode       = session.get("planting_mode", "boustrophedon")
+    spc        = session.get("seconds_per_cell", 2.0)
+    sw         = session.get("contour_strip_width", 2)
+
+    if mode == "contour":
+        new_strips = generate_contour_strips(
+            updated_mask, prio_grid, strip_width=sw, seconds_per_cell=spc
+        )
+    else:
+        new_strips = generate_strips(
+            prio_grid.tolist(), seconds_per_cell=spc, field_mask=updated_mask
+        )
+
+    n_cells_flooded = int((tidal_grid >= tidal_threshold).sum())
+    n_cells_plantable = int(updated_mask.sum())
+    n_total = nrows * ncols
+
+    state_store.update_run(
+        run_id,
+        soil_mask   = updated_mask,
+        tidal_grid  = tidal_grid,
+        strips      = new_strips,
+        result      = None,   # plan is stale — caller must reoptimize
+        state_history = session.get("state_history"),  # preserve history so far
+    )
+
+    return {
+        "run_id":                  run_id,
+        "n_cells_flooded":         n_cells_flooded,
+        "n_strips_before":         n_strips_before,
+        "n_strips_after":          len(new_strips),
+        "strips_removed":          n_strips_before - len(new_strips),
+        "plantable_cells_remaining": n_cells_plantable,
+        "plantable_pct_remaining": round(100.0 * n_cells_plantable / n_total, 1),
+        "tidal_level":             tidal_level,
+        "tidal_threshold":         tidal_threshold,
+        "note": "Strips regenerated. Call reoptimize() to reassign remaining strips to the fleet.",
+    }
+
+
+def report_wind_change(
+    run_id: str,
+    wind_speed_ms: float,
+    base_jitter_sigma: float = 0.3,
+) -> dict:
+    """Report a wind speed change and update battery drain and seed dispersal.
+
+    Updates battery_drain_per_cell and seed_jitter_sigma in the session.
+    These are picked up automatically by the next run_simulation_until()
+    chunk — no replanning required unless the battery impact is severe.
+
+    Args:
+        run_id: Session ID from load_reforestation_field.
+        wind_speed_ms: New wind speed in metres per second.
+        base_jitter_sigma: Baseline seed dispersal sigma at zero wind (cells).
+            Seed dispersal model: gravity-drop, NOT pneumatic. Horizontal offset
+            arises from forward drone speed during the drop and wind drift.
+            See _compute_seed_drops() in engine.py for the physics note.
+
+    Physics applied:
+        wind_multiplier        = 1.0 + 0.015 * wind_speed_ms   (from config.py)
+        battery_drain_per_cell = base_drain * wind_multiplier
+        seed_jitter_sigma      = base_jitter * (1 + 0.04 * wind_speed_ms)
+    """
+    session    = state_store.get_run(run_id)
+    base_drain = session.get("base_battery_drain_per_cell", 0.0)
+    bat_life   = session.get("battery_life_minutes", 35.0)
+
+    wind_multiplier = 1.0 + 0.015 * max(0.0, wind_speed_ms)
+    new_drain       = base_drain * wind_multiplier
+    new_jitter      = base_jitter_sigma * (1.0 + 0.04 * max(0.0, wind_speed_ms))
+
+    # Effective battery life (how it changes with wind)
+    if new_drain > 0:
+        effective_life_min = round((100.0 / new_drain) * session.get("seconds_per_cell", 2.0) / 60.0, 1)
+    else:
+        effective_life_min = bat_life
+
+    state_store.update_run(
+        run_id,
+        wind_speed_ms         = wind_speed_ms,
+        battery_drain_per_cell = new_drain,
+        seed_jitter_sigma     = new_jitter,
+    )
+
+    note = (
+        f"Wind updated to {wind_speed_ms} m/s. "
+        f"Battery drain +{round((wind_multiplier - 1) * 100, 1)}%; "
+        f"seed dispersal sigma {round(new_jitter, 3)} cells. "
+        "Picked up automatically by the next run_simulation_until() chunk."
+    )
+    if wind_speed_ms >= 15.0:
+        note += " WARNING: wind >= 15 m/s may compromise seed accuracy — consider pausing mission."
+
+    return {
+        "run_id":                      run_id,
+        "wind_speed_ms":               wind_speed_ms,
+        "wind_multiplier":             round(wind_multiplier, 4),
+        "battery_drain_per_cell":      round(new_drain, 4),
+        "seed_jitter_sigma":           round(new_jitter, 4),
+        "estimated_battery_life_minutes": effective_life_min,
+        "note":                        note,
+    }
+
+
+def enable_contour_planting(
+    run_id: str,
+    strip_width: int = 2,
+) -> dict:
+    """Switch from boustrophedon (lawnmower) to contour-following strips.
+
+    Contour strips hug tidal channel edges, producing sinuous paths that
+    mimic natural mangrove forest growth rather than industrial grid rows.
+    Uses a distance-transform of the soil mask — O(n), no extra image
+    processing needed.
+
+    Requires load_reforestation_field() to have been called (needs soil_mask).
+    Call create_plan() then run_simulation_until() after this.
+
+    Args:
+        run_id: Session ID from load_reforestation_field.
+        strip_width: Distance-band width in cells per strip.
+            1 = max sinuosity (many small strips, slower MILP)
+            2 = recommended (smooth curves, fewer strips)
+            3 = wider swaths, less curve detail
+    """
+    session   = state_store.get_run(run_id)
+    soil_mask = session.get("soil_mask")
+    prio_grid = session.get("priority_grid_np")
+    if soil_mask is None or prio_grid is None:
+        raise ValueError(
+            "No soil mask found. Call load_reforestation_field() first."
+        )
+
+    n_before   = len(session["strips"])
+    spc        = session.get("seconds_per_cell", 2.0)
+    new_strips = generate_contour_strips(
+        soil_mask, prio_grid, strip_width=strip_width, seconds_per_cell=spc
+    )
+
+    state_store.update_run(
+        run_id,
+        strips              = new_strips,
+        planting_mode       = "contour",
+        contour_strip_width = strip_width,
+        result              = None,   # plan is stale
+    )
+
+    return {
+        "run_id":         run_id,
+        "strips_before":  n_before,
+        "strips_after":   len(new_strips),
+        "strip_width":    strip_width,
+        "planting_mode":  "contour",
+        "note": (
+            "Strips replaced with contour-following paths. "
+            "Call create_plan() then run_simulation_until() to execute."
         ),
     }

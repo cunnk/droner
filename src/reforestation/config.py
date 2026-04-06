@@ -80,7 +80,19 @@ class MissionConfig:
     """Standard deviation of the Gaussian positional jitter applied to each
     recorded seed drop, expressed in grid cells.  Gives the seed cloud a
     natural, scattered appearance rather than a perfect grid pattern.
-    Set to 0.0 to disable jitter (seeds land exactly at cell centres)."""
+    Set to 0.0 to disable jitter (seeds land exactly at cell centres).
+
+    Physical basis — GRAVITY DROP, not pneumatic:
+    Real Distant Imagery drones open a hopper and seeds fall under gravity.
+    Horizontal offset arises from two sources:
+      (a) forward drone speed during the drop: dx ≈ v * sqrt(2*h/g)
+      (b) wind drift: dw ≈ wind_speed * fall_time
+    For h=5 m altitude, v=5 m/s drone speed:
+      fall_time ≈ 1.01 s  →  forward drift ≈ 5 m  ≈ 0.6–1.0 cells (at ~7.8 m/cell)
+    sigma=0.3 cells is a conservative lower bound for a slow, low-altitude pass.
+    Increase for faster or higher-altitude missions; decrease for hover-and-drop.
+    Improvement path: derive sigma from drop_altitude_m and drone_speed_mps via
+      sigma_cells = sqrt((v*t_fall)**2 + (w*t_fall)**2) / meters_per_cell"""
 
     # ------------------------------------------------------------------
     # Field scale
