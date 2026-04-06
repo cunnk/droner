@@ -741,6 +741,24 @@ def _compute_seed_drops(
     -------
     List of dicts, one per individual seed:
         {"drone_id": int, "nominal": [r, c], "actual": [ar, ac]}
+
+    Dispersal model — GRAVITY DROP, not pneumatic
+    -----------------------------------------------
+    Real Distant Imagery drones open a seed hopper; seeds fall under gravity
+    (no cannon or compressed-air launcher).  Horizontal offset is caused by:
+      (a) Forward drone speed while the hopper is open:
+              dx ≈ v_drone * sqrt(2 * h / g)
+          At h=5 m altitude, v=5 m/s: fall_time ≈ 1.01 s, dx ≈ 5 m
+      (b) Wind drift: dw ≈ wind_speed_ms * fall_time
+    At typical cell size ~7.8 m: dx ≈ 0.6–1.0 cells.
+    jitter_sigma=0.3 cells is therefore a conservative lower bound for a slow,
+    low-altitude pass; it is NOT modelling pneumatic scatter.
+
+    Improvement path: replace the fixed jitter_sigma with a physics-derived value:
+        t_fall = sqrt(2 * drop_altitude_m / 9.81)
+        sigma_m = sqrt((drone_speed_mps * t_fall)**2 + (wind_ms * t_fall)**2)
+        jitter_sigma = sigma_m / meters_per_cell
+    Add drop_altitude_m and drone_speed_mps to MissionConfig to enable this.
     """
     drops: List[Dict[str, Any]] = []
 
