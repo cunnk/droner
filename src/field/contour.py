@@ -109,20 +109,23 @@ def generate_contour_strips(
         if len(coords) < min_cells:
             continue
 
-        # Order cells by angle around the band centroid so the drone path
-        # traces the ring perimeter rather than jumping across it.
-        centroid = coords.mean(axis=0)
-        angles = np.arctan2(
-            coords[:, 0] - centroid[0],
-            coords[:, 1] - centroid[1],
-        )
-        ordered = coords[np.argsort(angles)]
+        # Order cells to stay geographically local — boustrophedon within the band.
+        # Angle-sorting around the centroid was tried but produces large jumps
+        # (mean 6 cells, max 25) because the centroid often lands in open water
+        # for a coastal mudflat, making the angle assignment meaningless.
+        # Row-boustrophedon keeps consecutive cells within the same or adjacent
+        # rows, producing strips that run roughly parallel to the shoreline.
+        row_groups: dict = {}
+        for r, c in [(int(r), int(c)) for r, c in coords]:
+            row_groups.setdefault(r, []).append(c)
 
-        # Alternate direction on every other strip (boustrophedon cadence)
-        if strip_id % 2 == 1:
-            ordered = ordered[::-1]
-
-        cells: List[Tuple[int, int]] = [(int(r), int(c)) for r, c in ordered]
+        cells: List[Tuple[int, int]] = []
+        for row_idx, row in enumerate(sorted(row_groups)):
+            cols = sorted(row_groups[row])
+            if row_idx % 2 == 1:
+                cols = cols[::-1]   # alternate direction each row
+            for c in cols:
+                cells.append((row, c))
 
         # Split large bands into sub-strips so each fits within one hopper load.
         # Without this, the engine's strip-restart-on-return behaviour causes the
