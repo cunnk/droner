@@ -3,14 +3,14 @@ Side-by-side GIF: Run A (Baseline) vs Run B (Field-Adaptive MCP).
 
 Timeline
 --------
-  0 → notice_frame        : both panels identical, mission in progress
-  notice_frame            : storm ALERT fires on Run B — countdown + mandatory zones revealed
-  storm_frame (last sim)  : storm ARRIVES — both panels flash, mission ends
+  0 -> notice_frame        : both panels identical, mission in progress
+  notice_frame            : storm ALERT fires on Run B -- countdown + mandatory zones revealed
+  storm_frame (last sim)  : storm ARRIVES -- both panels flash, mission ends
   hold frames             : freeze on final state for 1 s
 
 Terminology
 -----------
-  strip.priority  = spray urgency derived from vegetation density (0–1)
+  strip.priority  = spray urgency derived from vegetation density (0-1)
   mandatory zones = compliance / disease-priority strips that MUST be done
   Labelled differently in displays to avoid confusion.
 """
@@ -96,13 +96,13 @@ def create_weather_demo_gif(
     frames_b = hist_b[::frame_step]
     n_sim    = max(len(frames_a), len(frames_b))
 
-    # Simulation is already capped at storm_timestep — last frame IS the storm arrival
+    # Simulation is already capped at storm_timestep -- last frame IS the storm arrival
     storm_frame  = n_sim - 1
     notice_frame = (notice_timestep // frame_step) if notice_timestep > 0 \
                    else int(n_sim * notice_frame_pct)
     notice_frame = min(notice_frame, storm_frame - 1)
 
-    # Countdown from notice → storm
+    # Countdown from notice -> storm
     storm_seconds = max(storm_timestep - notice_timestep, 1) * 2.0   # 2 s/cell
     storm_minutes = storm_seconds / 60.0
 
@@ -126,7 +126,7 @@ def create_weather_demo_gif(
     mand_rows = [r for (r, _) in mandatory_cells]
     mand_cols = [c for (_, c) in mandatory_cells]
 
-    # Field events → frame windows (~2 s visible)
+    # Field events -> frame windows (~2 s visible)
     event_display: List[Dict] = []
     for ev in (field_events or []):
         sf = ev["timestep"] // frame_step
@@ -148,7 +148,7 @@ def create_weather_demo_gif(
     font_drone = max(6,  min(10,  420 // max(nrows, ncols)))
     dock_ms    = max(9,  min(16,  500 // max(nrows, ncols)))
 
-    # ── Figure ───────────────────────────────────────────────────────────────
+    # -- Figure ---------------------------------------------------------------
     has_log = bool(field_events)
     fig_h   = 8.2 if has_log else 6.5
     fig     = plt.figure(figsize=(13, fig_h))
@@ -183,7 +183,7 @@ def create_weather_demo_gif(
             sp.set_linewidth(1.0)
         log_text = ax_log.text(
             0.01, 0.92,
-            "📡 MCP DATA STREAM  (Run B field intelligence — not visible to Run A)",
+            "[MCP] MCP DATA STREAM  (Run B field intelligence -- not visible to Run A)",
             transform=ax_log.transAxes,
             ha="left", va="top", color="#58a6ff",
             fontsize=8.0, fontfamily="monospace", zorder=5,
@@ -213,7 +213,7 @@ def create_weather_demo_gif(
         img_b  = axes[1].imshow(init_g.copy(), cmap=_cmap, norm=_norm,
                                 interpolation="nearest")
 
-    # Mandatory zone outlines — Run A: never shown  |  Run B: hidden until notice
+    # Mandatory zone outlines -- Run A: never shown  |  Run B: hidden until notice
     mand_scat_b = None
     if mandatory_cells:
         mand_scat_b = axes[1].scatter(
@@ -230,7 +230,7 @@ def create_weather_demo_gif(
     ev_lbl_b  = axes[1].text(0, 0, "", color="#ff1744", fontsize=7.5,
                              fontweight="bold", ha="center", va="bottom", zorder=7)
 
-    # Docks — gold diamond, visible on both panels
+    # Docks -- gold diamond, visible on both panels
     for (dr, dc) in dock_set:
         for ax in axes:
             ax.plot(dc, dr, marker="D", markersize=dock_ms,
@@ -240,7 +240,7 @@ def create_weather_demo_gif(
                     fontsize=max(5, dock_ms - 4), color="#1a1a2e",
                     fontweight="bold", zorder=8)
 
-    # Drone circles — per panel, white edge for contrast
+    # Drone circles -- per panel, white edge for contrast
     circ_a: Dict[int, plt.Circle] = {}
     text_a: Dict[int, plt.Text]   = {}
     circ_b: Dict[int, plt.Circle] = {}
@@ -259,26 +259,26 @@ def create_weather_demo_gif(
 
     # Titles
     title_a = axes[0].set_title(
-        "Run A — Baseline (makespan)\nNo field intelligence",
+        "Run A -- Baseline (makespan)\nNo field intelligence",
         color="white", fontsize=11, fontweight="bold", pad=8,
     )
     title_b_ax = axes[1].set_title(
-        "Run B — Field-Adaptive (MCP)\nLive data stream coordination",
+        "Run B -- Field-Adaptive (MCP)\nLive data stream coordination",
         color="#90caf9", fontsize=11, fontweight="bold", pad=8,
     )
 
-    # Coverage counters — low enough to clear x-tick labels
-    cov_txt_a = axes[0].text(0.5, -0.11, "Coverage: —",
+    # Coverage counters -- low enough to clear x-tick labels
+    cov_txt_a = axes[0].text(0.5, -0.11, "Coverage: --",
                              transform=axes[0].transAxes,
                              ha="center", color="white", fontsize=9)
-    cov_txt_b = axes[1].text(0.5, -0.11, "Coverage: —",
+    cov_txt_b = axes[1].text(0.5, -0.11, "Coverage: --",
                              transform=axes[1].transAxes,
                              ha="center", color="#90caf9", fontsize=9)
 
-    # Storm alert badge — Run B right side, hidden until notice
+    # Storm alert badge -- Run B right side, hidden until notice
     alert_badge = axes[1].text(
         0.98, 0.97,
-        "⚠  STORM ALERT\n   —:-- remaining",
+        "[!]  STORM ALERT\n   --:-- remaining",
         transform=axes[1].transAxes,
         ha="right", va="top", color="white",
         fontsize=8.5, fontweight="bold", zorder=10,
@@ -287,10 +287,10 @@ def create_weather_demo_gif(
     )
     alert_badge.set_visible(False)
 
-    # MCP badge — inside Run B panel at bottom, hidden until notice
+    # MCP badge -- inside Run B panel at bottom, hidden until notice
     mcp_badge = axes[1].text(
         0.5, 0.03,
-        "⚡ MCP ENGAGED — COMPLIANCE-FIRST REPLAN",
+        "[*] MCP ENGAGED -- COMPLIANCE-FIRST REPLAN",
         transform=axes[1].transAxes,
         ha="center", va="bottom", color="#ffeb3b",
         fontsize=8.5, fontweight="bold", zorder=11,
@@ -299,7 +299,7 @@ def create_weather_demo_gif(
     )
     mcp_badge.set_visible(False)
 
-    # Storm-arrived overlay — both panels, hidden until storm + hold
+    # Storm-arrived overlay -- both panels, hidden until storm + hold
     def _make_storm_overlay(ax):
         t = ax.text(0.5, 0.5, "STORM\nARRIVED",
                     transform=ax.transAxes,
@@ -315,7 +315,7 @@ def create_weather_demo_gif(
     storm_ov_a = _make_storm_overlay(axes[0])
     storm_ov_b = _make_storm_overlay(axes[1])
 
-    suptitle = fig.suptitle("Drone Fleet — Mission in Progress",
+    suptitle = fig.suptitle("Drone Fleet -- Mission in Progress",
                             color="white", fontsize=13,
                             fontweight="bold", y=0.99)
 
@@ -338,9 +338,9 @@ def create_weather_demo_gif(
                facecolor="#1a1a2e", labelcolor="white",
                edgecolor="#444", fontsize=8.5)
 
-    # Layout handled by GridSpec — no tight_layout needed
+    # Layout handled by GridSpec -- no tight_layout needed
 
-    # ── Helpers ──────────────────────────────────────────────────────────────
+    # -- Helpers --------------------------------------------------------------
 
     def _update_drones(cd, td, frames, fi):
         fi   = min(fi, len(frames) - 1)
@@ -361,7 +361,7 @@ def create_weather_demo_gif(
                 circle.set_facecolor(d_colours[d_id])
             circle.set_alpha(0.5 if st == "idle" else 1.0)
 
-    # ── Animation update ─────────────────────────────────────────────────────
+    # -- Animation update -----------------------------------------------------
 
     def update(frame):
         # Clamp to last real sim frame during hold
@@ -413,29 +413,29 @@ def create_weather_demo_gif(
             ev_lbl_a.set_text("")
             ev_lbl_b.set_text("")
 
-        # ── Event log ────────────────────────────────────────────────────
+        # -- Event log ----------------------------------------------------
         if log_text is not None:
             cur_sim_t = frame * frame_step
             fired = [ev for ev in (field_events or []) if ev["timestep"] <= cur_sim_t]
             fired_sorted = sorted(fired, key=lambda e: e["timestep"])
             recent = fired_sorted[-4:]          # last 4 events
-            header = "📡 MCP DATA STREAM  (Run B field intelligence — not visible to Run A)"
+            header = "[MCP] MCP DATA STREAM  (Run B field intelligence -- not visible to Run A)"
             if not recent:
-                body = "     awaiting field reports…"
+                body = "     awaiting field reports..."
             else:
                 rows = []
                 for i, ev in enumerate(recent):
-                    marker = "▶" if i == len(recent) - 1 else " "
+                    marker = ">" if i == len(recent) - 1 else " "
                     desc   = ev.get("description", "").strip() or \
                              ev["event_type"].replace("_", " ").title()
                     rows.append(f"  {marker}  t={ev['timestep']:>4}   {desc}")
                 body = "\n".join(rows)
             log_text.set_text(f"{header}\n{body}")
 
-        # ── Timeline states ───────────────────────────────────────────────
+        # -- Timeline states -----------------------------------------------
         if frame >= storm_frame:
-            # Storm arrived — freeze + show overlay on both panels
-            suptitle.set_text("STORM ARRIVED — Mission concluded")
+            # Storm arrived -- freeze + show overlay on both panels
+            suptitle.set_text("STORM ARRIVED -- Mission concluded")
             storm_ov_a.set_visible(True)
             storm_ov_b.set_visible(True)
             for ax in axes:
@@ -449,16 +449,16 @@ def create_weather_demo_gif(
             mins      = int(remaining)
             secs      = int((remaining - mins) * 60)
 
-            alert_badge.set_text(f"⚠  STORM ALERT\n   {mins}:{secs:02d} remaining")
+            alert_badge.set_text(f"[!]  STORM ALERT\n   {mins}:{secs:02d} remaining")
             alert_badge.set_visible(True)
             mcp_badge.set_visible(True)
             if mand_scat_b is not None:
                 mand_scat_b.set_visible(True)
 
             title_b_ax.set_text(
-                "Run B — Field-Adaptive (MCP)\n⚡ Compliance-first replan active"
+                "Run B -- Field-Adaptive (MCP)\n[*] Compliance-first replan active"
             )
-            suptitle.set_text("Drone Fleet — Storm Alert Active  [Run B replanning]")
+            suptitle.set_text("Drone Fleet -- Storm Alert Active  [Run B replanning]")
 
             # Flash Run B border at alert onset
             flash_on = elapsed < 8 and elapsed % 2 == 0
@@ -467,7 +467,7 @@ def create_weather_demo_gif(
                 sp.set_linewidth(2.5)
 
         else:
-            suptitle.set_text("Drone Fleet — Mission in Progress")
+            suptitle.set_text("Drone Fleet -- Mission in Progress")
 
         extras = (log_text,) if log_text is not None else ()
         return (img_a, img_b, cov_txt_a, cov_txt_b,
@@ -486,9 +486,9 @@ def create_weather_demo_gif(
     ucov_b = metrics_b.get("priority_coverage", 0)
     mcov_a = metrics_a.get("mandatory_coverage_pct", float("nan"))
     mcov_b = metrics_b.get("mandatory_coverage_pct", float("nan"))
-    print(f"Urgency-weighted coverage — A: {ucov_a:.1%}  B: {ucov_b:.1%}  "
+    print(f"Urgency-weighted coverage -- A: {ucov_a:.1%}  B: {ucov_b:.1%}  "
           f"(lift {ucov_b - ucov_a:+.1%})")
     if not np.isnan(mcov_a):
-        print(f"Mandatory zone coverage   — A: {mcov_a:.1f}%  B: {mcov_b:.1f}%  "
+        print(f"Mandatory zone coverage   -- A: {mcov_a:.1f}%  B: {mcov_b:.1f}%  "
               f"(lift {mcov_b - mcov_a:+.1f}pp)")
     return save_path

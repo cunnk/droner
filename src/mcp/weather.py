@@ -18,7 +18,7 @@ _state: dict = {
 
 def arm_alert(
     minutes_remaining: float,
-    description: str = "Storm approaching — mission window closing",
+    description: str = "Storm approaching -- mission window closing",
 ) -> None:
     """Arm the weather alert (simulate an incoming storm)."""
     _state["alert"] = True

@@ -23,26 +23,26 @@ Seed dispersal rate
 The user specifies a desired *average spacing* between seeds (in metres).
 We convert this to a per-cell seed count:
 
-    seeds_per_cell = cell_area_m² / seed_spacing_m²
+    seeds_per_cell = cell_area_m^2 / seed_spacing_m^2
 
 So:
-  spacing = 0.5 m  →  cell 1 m² → 4 seeds / cell
-  spacing = 1.5 m  →  cell 1 m² → 0.44 seeds / cell  (≈ 1 seed every 2–3 cells)
-  spacing = 3.0 m  →  cell 1 m² → 0.11 seeds / cell  (≈ 1 seed every 9 m²)
+  spacing = 0.5 m  ->  cell 1 m^2 -> 4 seeds / cell
+  spacing = 1.5 m  ->  cell 1 m^2 -> 0.44 seeds / cell  (~= 1 seed every 2-3 cells)
+  spacing = 3.0 m  ->  cell 1 m^2 -> 0.11 seeds / cell  (~= 1 seed every 9 m^2)
 
-The formula naturally handles fractional seeds — the simulation accumulates a
+The formula naturally handles fractional seeds -- the simulation accumulates a
 running seed counter and drops a seed whenever it crosses an integer threshold,
 giving the correct *average* density without requiring sub-cell precision.
 
 Battery model
 -------------
-Battery life is given as total flight minutes (30–45 min typical).  We convert
+Battery life is given as total flight minutes (30-45 min typical).  We convert
 to the per-cell drain percentage used by the simulation engine:
 
-    battery_drain_per_cell = 100% / (battery_life_minutes × 60 s/min / seconds_per_cell)
+    battery_drain_per_cell = 100% / (battery_life_minutes x 60 s/min / seconds_per_cell)
 
-Wind adds a multiplicative penalty:  multiplier = 1 + 0.015 × wind_speed_ms
-(rough approximation; 10 m/s headwind ≈ +15 % drain).
+Wind adds a multiplicative penalty:  multiplier = 1 + 0.015 x wind_speed_ms
+(rough approximation; 10 m/s headwind ~= +15 % drain).
 """
 
 from __future__ import annotations
@@ -73,8 +73,8 @@ class MissionConfig:
 
     seed_spacing_m: float = 1.5
     """Desired average distance between planted seeds on the ground (metres).
-    Valid range: 0.5 m (dense) – 3.0 m (sparse).
-    Formula: seeds/m² = 1 / seed_spacing_m²."""
+    Valid range: 0.5 m (dense) - 3.0 m (sparse).
+    Formula: seeds/m^2 = 1 / seed_spacing_m^2."""
 
     seed_jitter_sigma: float = 0.3
     """Standard deviation of the Gaussian positional jitter applied to each
@@ -82,13 +82,13 @@ class MissionConfig:
     natural, scattered appearance rather than a perfect grid pattern.
     Set to 0.0 to disable jitter (seeds land exactly at cell centres).
 
-    Physical basis — GRAVITY DROP, not pneumatic:
+    Physical basis -- GRAVITY DROP, not pneumatic:
     Real Distant Imagery drones open a hopper and seeds fall under gravity.
     Horizontal offset arises from two sources:
-      (a) forward drone speed during the drop: dx ≈ v * sqrt(2*h/g)
-      (b) wind drift: dw ≈ wind_speed * fall_time
+      (a) forward drone speed during the drop: dx ~= v * sqrt(2*h/g)
+      (b) wind drift: dw ~= wind_speed * fall_time
     For h=5 m altitude, v=5 m/s drone speed:
-      fall_time ≈ 1.01 s  →  forward drift ≈ 5 m  ≈ 0.6–1.0 cells (at ~7.8 m/cell)
+      fall_time ~= 1.01 s  ->  forward drift ~= 5 m  ~= 0.6-1.0 cells (at ~7.8 m/cell)
     sigma=0.3 cells is a conservative lower bound for a slow, low-altitude pass.
     Increase for faster or higher-altitude missions; decrease for hover-and-drop.
     Improvement path: derive sigma from drop_altitude_m and drone_speed_mps via
@@ -107,7 +107,7 @@ class MissionConfig:
     # Battery & recharge
     # ------------------------------------------------------------------
     battery_life_minutes: float = 35.0
-    """Total usable flight time on a full charge (minutes).  30–45 min is
+    """Total usable flight time on a full charge (minutes).  30-45 min is
     typical for agricultural / reforestation drones in calm conditions.
     Wind increases effective drain (see wind_speed_ms)."""
 
@@ -119,12 +119,12 @@ class MissionConfig:
     # ------------------------------------------------------------------
     wind_speed_ms: float = 0.0
     """Ambient wind speed (m/s).  Applied as a battery drain multiplier:
-    multiplier = 1.0 + 0.015 × wind_speed_ms
-    0 m/s = calm, 5 m/s ≈ +7.5 %, 10 m/s ≈ +15 % extra drain."""
+    multiplier = 1.0 + 0.015 x wind_speed_ms
+    0 m/s = calm, 5 m/s ~= +7.5 %, 10 m/s ~= +15 % extra drain."""
 
     tidal_threshold: float = 0.6
     """Cells with tidal / moisture value above this threshold are considered
-    submerged and excluded from planting.  Scale is 0–1 (0 = dry, 1 = fully
+    submerged and excluded from planting.  Scale is 0-1 (0 = dry, 1 = fully
     inundated).  Used by apply_tidal_mask() in soil_detector.py."""
 
     # ------------------------------------------------------------------
@@ -151,14 +151,14 @@ class MissionConfig:
     """Human-readable mission label used in animation titles and reports."""
 
     # ------------------------------------------------------------------
-    # Survival model (informational — not used in core simulation)
+    # Survival model (informational -- not used in core simulation)
     # ------------------------------------------------------------------
     survival_rate: float = 0.40
     """Fraction of planted seeds expected to survive to seedling stage.
     Mangrove: ~40 %.  Used in reforestation metrics summary."""
 
     target_density_per_m2: float = 1.0
-    """Desired surviving seedlings per m² after all reseeding passes."""
+    """Desired surviving seedlings per m^2 after all reseeding passes."""
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +202,14 @@ def compute_sim_params(config: MissionConfig, ncols: int) -> Dict[str, Any]:
     Returns
     -------
     dict with keys:
-        meters_per_cell         float   — real-world size of one grid cell (m)
-        cell_area_m2            float   — area of one grid cell (m²)
-        seeds_per_cell          float   — average seeds dropped per spray cell
-        battery_drain_per_cell  float   — % battery lost per cell traversed
-        recharge_time_steps     int     — timesteps at dock to fully recharge
-        wind_multiplier         float   — battery drain multiplier from wind
-        seed_capacity           int     — seeds per drone voyage (pass-through)
-        seed_jitter_sigma       float   — Gaussian jitter std dev (pass-through)
+        meters_per_cell         float   -- real-world size of one grid cell (m)
+        cell_area_m2            float   -- area of one grid cell (m^2)
+        seeds_per_cell          float   -- average seeds dropped per spray cell
+        battery_drain_per_cell  float   -- % battery lost per cell traversed
+        recharge_time_steps     int     -- timesteps at dock to fully recharge
+        wind_multiplier         float   -- battery drain multiplier from wind
+        seed_capacity           int     -- seeds per drone voyage (pass-through)
+        seed_jitter_sigma       float   -- Gaussian jitter std dev (pass-through)
 
     The dict can be unpacked directly into simulate() and used to build
     DroneSpec objects::
@@ -233,14 +233,14 @@ def compute_sim_params(config: MissionConfig, ncols: int) -> Dict[str, Any]:
     cell_area_m2    = meters_per_cell ** 2
 
     # --- Seed density ---
-    # seeds/m² = 1 / spacing²  →  seeds/cell = cell_area × seeds/m²
+    # seeds/m^2 = 1 / spacing^2  ->  seeds/cell = cell_area x seeds/m^2
     seeds_per_cell = cell_area_m2 / max(config.seed_spacing_m ** 2, 1e-6)
 
     # --- Wind penalty ---
     wind_multiplier = 1.0 + 0.015 * max(config.wind_speed_ms, 0.0)
 
     # --- Battery drain ---
-    # 100 % battery lasts (battery_life_minutes × 60 / seconds_per_cell) cells
+    # 100 % battery lasts (battery_life_minutes x 60 / seconds_per_cell) cells
     cells_per_charge = (config.battery_life_minutes * 60.0
                         / max(config.seconds_per_cell, 0.01))
     battery_drain_per_cell = (100.0 / cells_per_charge) * wind_multiplier
@@ -277,21 +277,21 @@ def print_mission_summary(config: MissionConfig, ncols: int) -> None:
     print(f"    Drones              : {config.n_drones}")
     print(f"    Seed capacity       : {config.seed_capacity:,} seeds/voyage")
     print(f"    Seed spacing        : {config.seed_spacing_m} m  "
-          f"({1/config.seed_spacing_m**2:.3f} seeds/m²)")
+          f"({1/config.seed_spacing_m**2:.3f} seeds/m^2)")
     print(f"  Scale")
     print(f"    Field width         : {config.field_width_m} m")
     print(f"    Grid columns        : {ncols}")
     print(f"    Metres per cell     : {p['meters_per_cell']:.2f} m")
-    print(f"    Cell area           : {p['cell_area_m2']:.2f} m²")
+    print(f"    Cell area           : {p['cell_area_m2']:.2f} m^2")
     print(f"    Seeds per cell      : {p['seeds_per_cell']:.2f}")
     print(f"  Battery")
     print(f"    Battery life        : {config.battery_life_minutes} min")
     print(f"    Wind speed          : {config.wind_speed_ms} m/s  "
-          f"(×{p['wind_multiplier']:.3f} drain)")
+          f"(x{p['wind_multiplier']:.3f} drain)")
     print(f"    Drain per cell      : {p['battery_drain_per_cell']:.4f} %")
     print(f"    Recharge time       : {config.recharge_time_seconds/3600:.1f} hr  "
           f"({p['recharge_time_steps']} steps)")
     print(f"  Survival model")
     print(f"    Survival rate       : {config.survival_rate*100:.0f} %")
-    print(f"    Target density      : {config.target_density_per_m2} survivors/m²")
+    print(f"    Target density      : {config.target_density_per_m2} survivors/m^2")
     print(f"{'-'*52}\n")

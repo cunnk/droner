@@ -2,7 +2,7 @@
 Simulation engine.
 
 Drones start at their assigned dock and move one grid cell per timestep.
-There is no teleportation — all transitions between strips or between
+There is no teleportation -- all transitions between strips or between
 field and dock are physically animated.
 
 States
@@ -10,10 +10,10 @@ States
 idle       : no current task; will pick up next strip from queue.
 moving     : flying to a strip entry point (no spraying).
 spraying   : actively covering a strip, cell by cell.
-frozen     : comms loss — stationary, resumes when countdown expires.
+frozen     : comms loss -- stationary, resumes when countdown expires.
 returning  : flying back to dock (battery depleted, recharge mode on).
 charging   : sitting at dock, recharging (ticked separately from active).
-failed     : permanent failure — drone is out for the rest of the mission.
+failed     : permanent failure -- drone is out for the rest of the mission.
 
 Transit and strip entry
 -----------------------
@@ -49,7 +49,7 @@ Seed capacity (reforestation mode)
 -----------------------------------
 Pass seeds_per_cell > 0 to activate reforestation mode.  Seeds deplete
 as the drone sprays; when the hopper hits 0 the drone returns to dock,
-refills (instantaneous alongside battery recharge), then resumes — using
+refills (instantaneous alongside battery recharge), then resumes -- using
 the same _initiate_return() / recharge lifecycle as battery failures.
 Seed drops are recorded per timestep in state_history as "seed_drops"
 with Gaussian jitter applied to the recorded positions so the planting
@@ -92,7 +92,7 @@ def _manhattan(a: Tuple[int, int], b: Tuple[int, int]) -> int:
 
 
 def _step_toward(pos: Tuple[int, int], target: Tuple[int, int]) -> Tuple[int, int]:
-    """One-cell step from pos toward target — row-first, then column."""
+    """One-cell step from pos toward target -- row-first, then column."""
     r, c   = pos
     tr, tc = target
     if r < tr: return (r + 1, c)
@@ -185,7 +185,7 @@ def simulate(
                                 restored from the frame.  stale held_strips are cleared
                                 so drones pick from the new assignment after recharging.
         seeds_per_cell        : Average seeds dispensed per spray cell (reforestation
-                                mode).  0 = spray/ag mode — all seed logic is skipped.
+                                mode).  0 = spray/ag mode -- all seed logic is skipped.
                                 Derive from MissionConfig via compute_sim_params().
         seed_jitter_sigma     : Std dev (in grid cells) of Gaussian positional jitter
                                 applied to recorded seed drop coordinates.  Produces a
@@ -212,7 +212,7 @@ def simulate(
         drone_states: Dict[int, DroneState] = {}
         for d_raw in initial_state["drones"]:
             ds = copy.deepcopy(d_raw)
-            # Stale held_strips belong to the old plan — clear them so the
+            # Stale held_strips belong to the old plan -- clear them so the
             # drone picks up from the new queue after it finishes recharging.
             ds["held_strips"] = []
             # Restore position as a tuple (JSON round-trips lists)
@@ -282,7 +282,7 @@ def simulate(
                 # the field; global pooling can.
                 #
                 # Greedy loop: repeatedly pick the (drone, strip) pair with the
-                # highest score = priority / (1 + λ × dist), assign that strip
+                # highest score = priority / (1 + lam x dist), assign that strip
                 # to that drone, then advance the drone's effective position to
                 # the strip exit so the next pick accounts for travel.
                 lam = ev.get("lambda_dist", 1.0 / (nrows + ncols))
@@ -371,7 +371,7 @@ def simulate(
             if ds["recharge_countdown"] > 0:
                 continue
 
-            # Recharge complete — restore battery (and seed hopper) then return to field
+            # Recharge complete -- restore battery (and seed hopper) then return to field
             ds["battery"] = 100.0
             if seeds_per_cell > 0:
                 ds["seed_load"] = float(drone_map[d_id].seed_capacity)
@@ -392,10 +392,10 @@ def simulate(
                 ds["transit_target"]       = entry
                 ds["transit_action"]       = "spray"
                 ds["state"]                = "moving"
-                event_log.append(f"Drone {d_id} recharged — flying to strip {next_sid}")
+                event_log.append(f"Drone {d_id} recharged -- flying to strip {next_sid}")
             else:
                 ds["state"] = "idle"
-                event_log.append(f"Drone {d_id} recharged — idle")
+                event_log.append(f"Drone {d_id} recharged -- idle")
 
         # --------------------------------------------------------------------
         # 3. Advance each active drone one step
@@ -420,7 +420,7 @@ def simulate(
                 ds["position"] = new_pos
 
                 # Drain battery during transit (but not for a drone already
-                # heading home — battery is already 0)
+                # heading home -- battery is already 0)
                 if battery_drain_per_cell > 0 and state != "returning":
                     ds["battery"] = max(0.0, ds["battery"] - battery_drain_per_cell)
                     if ds["battery"] <= 0:
@@ -443,7 +443,7 @@ def simulate(
                         ds["recharge_countdown"] = recharge_time_steps
                         active_drones.discard(d_id)
                         charging_drones.add(d_id)
-                        event_log.append(f"Drone {d_id} at dock — charging")
+                        event_log.append(f"Drone {d_id} at dock -- charging")
                     elif ds["transit_action"] == "spray":
                         ds["state"] = "spraying"
                     ds["transit_target"] = None
@@ -452,7 +452,7 @@ def simulate(
                 all_done = False
                 continue
 
-            # ---- Idle — pick up next strip ----
+            # ---- Idle -- pick up next strip ----
             if state == "idle":
                 if not queues[d_id]:
                     continue  # nothing to do
@@ -523,7 +523,7 @@ def simulate(
                     if seeds_per_cell > 0 and (r, c) in spray_set:
                         ds["seed_load"] = max(0.0, ds["seed_load"] - seeds_per_cell)
                         if ds["seed_load"] <= 0:
-                            # Hopper empty — return to dock to refill (same as battery)
+                            # Hopper empty -- return to dock to refill (same as battery)
                             held = [ds["current_strip"]] + list(queues.get(d_id, []))
                             ds["held_strips"]          = held
                             queues[d_id]               = []
@@ -538,7 +538,7 @@ def simulate(
                     all_done = False
 
                 else:
-                    # Strip finished — mark spray cells complete, leave non-spray cells untouched
+                    # Strip finished -- mark spray cells complete, leave non-spray cells untouched
                     spray_set = set(strip_map[ds["current_strip"]].spray_cells)
                     for r, c in cells:
                         if (r, c) in spray_set and grid[r][c] != CELL_FAILED:
@@ -637,7 +637,7 @@ def _fail_drone(
     active_drones.discard(d_id)
 
     # Mark unvisited spray cells of current strip as failed
-    # (non-spray cells are never marked — they stay untouched)
+    # (non-spray cells are never marked -- they stay untouched)
     cells = ds.get("current_strip_cells", [])
     ci    = ds.get("current_cell_index", 0)
     if ds.get("current_strip") is not None:
@@ -732,7 +732,7 @@ def _compute_seed_drops(
     Parameters
     ----------
     drone_states : current drone state dicts
-    strip_map    : strip_id → Strip
+    strip_map    : strip_id -> Strip
     seeds_per_cell : average seeds per spray cell (may be fractional)
     jitter_sigma : std dev of positional jitter in grid cells
     nrows, ncols : grid bounds for clipping
@@ -742,15 +742,15 @@ def _compute_seed_drops(
     List of dicts, one per individual seed:
         {"drone_id": int, "nominal": [r, c], "actual": [ar, ac]}
 
-    Dispersal model — GRAVITY DROP, not pneumatic
+    Dispersal model -- GRAVITY DROP, not pneumatic
     -----------------------------------------------
     Real Distant Imagery drones open a seed hopper; seeds fall under gravity
     (no cannon or compressed-air launcher).  Horizontal offset is caused by:
       (a) Forward drone speed while the hopper is open:
-              dx ≈ v_drone * sqrt(2 * h / g)
-          At h=5 m altitude, v=5 m/s: fall_time ≈ 1.01 s, dx ≈ 5 m
-      (b) Wind drift: dw ≈ wind_speed_ms * fall_time
-    At typical cell size ~7.8 m: dx ≈ 0.6–1.0 cells.
+              dx ~= v_drone * sqrt(2 * h / g)
+          At h=5 m altitude, v=5 m/s: fall_time ~= 1.01 s, dx ~= 5 m
+      (b) Wind drift: dw ~= wind_speed_ms * fall_time
+    At typical cell size ~7.8 m: dx ~= 0.6-1.0 cells.
     jitter_sigma=0.3 cells is therefore a conservative lower bound for a slow,
     low-altitude pass; it is NOT modelling pneumatic scatter.
 

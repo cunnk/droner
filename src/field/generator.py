@@ -9,25 +9,25 @@ Orientation
 -----------
 Agricultural fields are rarely all east-west. Rows are aligned to:
   - The field's longest edge (minimises turns, maximises efficiency)
-  - Slope direction (erosion control — rows run along contour lines)
+  - Slope direction (erosion control -- rows run along contour lines)
   - Previous season's tillage direction
 
 Pass orientation_deg to generate_strips() to match the field:
-  0°   east-west strips   (default, horizontal sweeps)
-  90°  north-south strips (vertical sweeps)
-  45°  diagonal strips    (45° from east)
+  0deg   east-west strips   (default, horizontal sweeps)
+  90deg  north-south strips (vertical sweeps)
+  45deg  diagonal strips    (45deg from east)
   any  arbitrary angle
 
 Algorithm (arbitrary angle)
 ---------------------------
-For an orientation θ degrees from horizontal:
+For an orientation theta degrees from horizontal:
 
-  strip_vec  = (cos θ,  sin θ)   — direction along each strip
-  across_vec = (-sin θ, cos θ)   — direction from one strip to the next
+  strip_vec  = (cos theta,  sin theta)   -- direction along each strip
+  across_vec = (-sin theta, cos theta)   -- direction from one strip to the next
 
 For each grid cell (r, c):
-  along_proj  = r·cos θ + c·sin θ    — position along strip
-  across_proj = -r·sin θ + c·cos θ   — which strip the cell belongs to
+  along_proj  = r*cos theta + c*sin theta    -- position along strip
+  across_proj = -r*sin theta + c*cos theta   -- which strip the cell belongs to
 
 Cells are binned by quantised across_proj into strips, then ordered by
 along_proj within each strip. Boustrophedon alternates the direction
@@ -47,7 +47,7 @@ import numpy as np
 @dataclass
 class Strip:
     id: int
-    cells: List[Tuple[int, int]]         # all (row, col) in traversal order — drone flies all of these
+    cells: List[Tuple[int, int]]         # all (row, col) in traversal order -- drone flies all of these
     spray_cells: List[Tuple[int, int]]   # subset where sprayer is active (above threshold, inside mask)
     spray_segments: List[Tuple[int, int]]  # contiguous spray runs as (start_idx, end_idx) into cells
     priority: float                      # mean spray priority over spray_cells only
@@ -58,7 +58,7 @@ class Strip:
         return (f"Strip(id={self.id}, cells={len(self.cells)}, "
                 f"spray={len(self.spray_cells)}, segments={len(self.spray_segments)}, "
                 f"priority={self.priority:.2f}, time={self.time:.1f}s, "
-                f"orientation={self.orientation_deg:.0f}°)")
+                f"orientation={self.orientation_deg:.0f}deg)")
 
 
 def generate_strips(
@@ -85,7 +85,7 @@ def generate_strips(
                           skipped (drone transits over them, sprayer stays off).
                           0.0 = spray every cell (default, backward-compatible).
         field_mask:       Optional boolean 2D array, same shape as field_grid.
-                          False/0 cells are outside the field boundary — drone
+                          False/0 cells are outside the field boundary -- drone
                           still flies over them (path continuity) but never
                           sprays them regardless of priority.
 
@@ -194,8 +194,8 @@ def _strips_angled(
     Generate strips at an arbitrary angle using coordinate projection.
 
     Each cell is projected onto two orthogonal axes:
-      - along_proj  → position along the strip (determines traversal order)
-      - across_proj → which strip the cell belongs to
+      - along_proj  -> position along the strip (determines traversal order)
+      - across_proj -> which strip the cell belongs to
 
     Cells are binned by quantised across_proj, ordered by along_proj,
     and alternated (boustrophedon) every other strip.
@@ -259,12 +259,12 @@ def _make_strip(
     """
     Build a Strip from a cell list and the priority grid.
 
-    Returns None if no cells pass the spray threshold / field mask — the
+    Returns None if no cells pass the spray threshold / field mask -- the
     caller should drop the strip entirely rather than assigning empty work.
 
     Time model:
-        transit_time = all cells × seconds_per_cell   (drone always flies full path)
-        spray_time   = spray cells × seconds_per_cell × mean_priority
+        transit_time = all cells x seconds_per_cell   (drone always flies full path)
+        spray_time   = spray cells x seconds_per_cell x mean_priority
     This ensures the optimizer accounts for real expected duration: a strip
     with 60% non-crop cells is genuinely faster than a fully cropped one.
     """
@@ -334,7 +334,7 @@ def synthetic_field(
 
     Creates spatially coherent crop patches (Gaussian blobs) rather than
     pure random noise, so the field looks like distinct crop zones with
-    varying treatment priority — closer to a real field than a uniform grid.
+    varying treatment priority -- closer to a real field than a uniform grid.
 
     Args:
         nrows, ncols: Grid dimensions.

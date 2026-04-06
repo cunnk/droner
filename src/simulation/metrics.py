@@ -7,7 +7,7 @@ lists, with no side effects. Plot helpers are thin wrappers around matplotlib.
 Scalar metrics
 --------------
 coverage_pct            : % of cells marked complete at end of run.
-priority_coverage       : weighted coverage — sum over completed strips of
+priority_coverage       : weighted coverage -- sum over completed strips of
                           (strip.priority * cells_in_strip) / total_possible.
 makespan                : total number of simulation steps taken.
 replan_count            : how many replanning events occurred.
@@ -28,7 +28,7 @@ Monte Carlo
 monte_carlo_analysis()  : run N simulations with random failures, return
                           distribution of coverage_pct and time_to_recovery.
 
-Reforestation metrics (additive — only present when seeds_per_cell > 0)
+Reforestation metrics (additive -- only present when seeds_per_cell > 0)
 ------------------------------------------------------------------------
 total_seeds_planted     : total individual seed drops recorded.
 unique_cells_seeded     : number of distinct grid cells that received seeds.
@@ -308,7 +308,7 @@ def monte_carlo_analysis(
 ) -> Dict[str, Any]:
     """
     Run N simulations with randomly injected failures. Returns the distribution
-    of key operator metrics — the primary tool for worst-case analysis.
+    of key operator metrics -- the primary tool for worst-case analysis.
 
     Args:
         strips:                   Strips used in simulation.
@@ -400,7 +400,7 @@ def monte_carlo_analysis(
         "coverage_pct_std":         round(float(cov.std()), 2),
         "coverage_pct_p5":          round(float(np.percentile(cov, 5)), 2),
         "coverage_pct_p95":         round(float(np.percentile(cov, 95)), 2),
-        # Makespan distribution — primary operator metric
+        # Makespan distribution -- primary operator metric
         "makespan_mean":            round(float(mks.mean()), 1),
         "makespan_std":             round(float(mks.std()), 1),
         "makespan_p5":              int(np.percentile(mks, 5)),
@@ -434,7 +434,7 @@ def plot_monte_carlo(
     if ax is None:
         fig, axes = plt.subplots(1, 2, figsize=(13, 4))
     else:
-        # Caller supplied a single Axes — fall back to single-panel makespan only.
+        # Caller supplied a single Axes -- fall back to single-panel makespan only.
         axes = [ax, None]
 
     n    = mc_result["n_runs"]
@@ -538,8 +538,8 @@ def compute_reforestation_metrics(
 
     total_seeds_planted     : total seed drop events recorded
     unique_cells_seeded     : distinct cells that received at least one seed
-    total_area_covered_m2   : unique_cells_seeded × meters_per_cell²
-    expected_survivors      : total_seeds_planted × survival_rate
+    total_area_covered_m2   : unique_cells_seeded x meters_per_cell^2
+    expected_survivors      : total_seeds_planted x survival_rate
     seeds_per_drone_remaining : {drone_id: seeds_left} at end of mission
     seed_series             : {drone_id: [seed_load at each timestep]}
     dock_returns_for_seeds  : number of hopper-empty dock returns during mission
@@ -551,8 +551,8 @@ def compute_reforestation_metrics(
     nrows, ncols    : grid dimensions
     meters_per_cell : real-world size of one grid cell (metres)
                       from compute_sim_params()["meters_per_cell"]
-    survival_rate   : fraction of planted seeds expected to survive (0–1)
-    target_density_per_m2 : desired surviving seedlings per m²
+    survival_rate   : fraction of planted seeds expected to survive (0-1)
+    target_density_per_m2 : desired surviving seedlings per m^2
     """
     # Base metrics (includes total_seeds_planted etc. if seed_drops present)
     m = compute_metrics(state_history, strips, nrows, ncols)
@@ -597,19 +597,19 @@ def print_reforestation_summary(metrics: Dict[str, Any], config=None) -> None:
         print("  Reforestation Mission Summary")
     print(f"{'='*54}")
     print(f"  Coverage")
-    print(f"    % area seeded       : {metrics.get('coverage_pct', '–')} %")
-    print(f"    Unique cells seeded : {metrics.get('unique_cells_seeded', '–')}")
-    print(f"    Area covered        : {metrics.get('total_area_covered_m2', '–')} m²")
+    print(f"    % area seeded       : {metrics.get('coverage_pct', '-')} %")
+    print(f"    Unique cells seeded : {metrics.get('unique_cells_seeded', '-')}")
+    print(f"    Area covered        : {metrics.get('total_area_covered_m2', '-')} m^2")
     print(f"  Seeds")
-    print(f"    Total seeds planted : {metrics.get('total_seeds_planted', '–'):,}"
+    print(f"    Total seeds planted : {metrics.get('total_seeds_planted', '-'):,}"
           if isinstance(metrics.get('total_seeds_planted'), int) else
-          f"    Total seeds planted : {metrics.get('total_seeds_planted', '–')}")
-    print(f"    Expected survivors  : {metrics.get('expected_survivors', '–')}")
-    print(f"    Hopper refill stops : {metrics.get('dock_returns_for_seeds', '–')}")
+          f"    Total seeds planted : {metrics.get('total_seeds_planted', '-')}")
+    print(f"    Expected survivors  : {metrics.get('expected_survivors', '-')}")
+    print(f"    Hopper refill stops : {metrics.get('dock_returns_for_seeds', '-')}")
     print(f"  Mission")
-    print(f"    Makespan            : {metrics.get('makespan', '–')} steps")
-    print(f"    Replanning events   : {metrics.get('replan_count', '–')}")
-    print(f"    Failed drones       : {metrics.get('failed_drone_count', '–')}")
+    print(f"    Makespan            : {metrics.get('makespan', '-')} steps")
+    print(f"    Replanning events   : {metrics.get('replan_count', '-')}")
+    print(f"    Failed drones       : {metrics.get('failed_drone_count', '-')}")
     if metrics.get("time_to_recovery") is not None:
         print(f"    Time to recovery    : {metrics['time_to_recovery']} steps")
     if metrics.get("coverage_at_failure") is not None:
@@ -628,7 +628,7 @@ def plot_seed_drops(
 ):
     """Scatter plot of all actual seed drop positions across the mission.
 
-    Shows the natural jitter distribution — seeds form a cloud rather than a
+    Shows the natural jitter distribution -- seeds form a cloud rather than a
     perfect grid, demonstrating organic-looking planting patterns.
 
     Parameters
@@ -649,8 +649,8 @@ def plot_seed_drops(
     for state in state_history:
         for drop in state.get("seed_drops", []):
             r, c = drop["actual"]
-            xs.append(c)          # col → x
-            ys.append(nrows - r)  # row → y (flip so row 0 is top)
+            xs.append(c)          # col -> x
+            ys.append(nrows - r)  # row -> y (flip so row 0 is top)
 
     if xs:
         ax.scatter(xs, ys, s=2, alpha=alpha, color=color, linewidths=0)

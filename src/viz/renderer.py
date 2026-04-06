@@ -1,5 +1,5 @@
 """
-Visualisation layer — fully decoupled from simulation and optimisation.
+Visualisation layer -- fully decoupled from simulation and optimisation.
 
 Input:  state_history produced by simulate()
 Output: matplotlib animation (displayed or saved as GIF)
@@ -13,7 +13,7 @@ Standard mode (default)
 Overlay mode  (pass background_image=<numpy array>)
     Aerial photograph as background.
     Coverage status rendered as a semi-transparent RGBA layer on top:
-        Untouched  : fully transparent — photograph shows through unobstructed
+        Untouched  : fully transparent -- photograph shows through unobstructed
         In-progress: yellow tint  (alpha 0.55)
         Complete   : gray tint    (alpha 0.45)
         Failed     : red tint     (alpha 0.65)
@@ -21,7 +21,7 @@ Overlay mode  (pass background_image=<numpy array>)
 
 Grid lines
 ----------
-Drawn by default for grids ≤ 64 cells per side.
+Drawn by default for grids <= 64 cells per side.
 Automatically suppressed for larger grids (too dense to be useful).
 Override with show_grid_lines=True/False.
 """
@@ -36,21 +36,21 @@ import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.colors import ListedColormap
 
-# Cell value → colour (used in standard mode)
+# Cell value -> colour (used in standard mode)
 CELL_CMAP = ListedColormap([
-    "#c8e6c9",   # 0 untouched   → light green
-    "#fff176",   # 1 in-progress → yellow
-    "#bdbdbd",   # 2 complete    → gray
-    "#ef9a9a",   # 3 failed      → light red
+    "#c8e6c9",   # 0 untouched   -> light green
+    "#fff176",   # 1 in-progress -> yellow
+    "#bdbdbd",   # 2 complete    -> gray
+    "#ef9a9a",   # 3 failed      -> light red
 ])
 
-# Cell value → RGBA used in overlay mode
+# Cell value -> RGBA used in overlay mode
 # Untouched = fully transparent so the aerial photo shows through
 _OVERLAY_COLOURS: Dict[int, Tuple[float, float, float, float]] = {
-    0: (0.00, 0.00, 0.00, 0.00),   # untouched   — transparent
-    1: (1.00, 0.95, 0.20, 0.55),   # in-progress — yellow
-    2: (0.65, 0.65, 0.65, 0.45),   # complete    — gray
-    3: (0.92, 0.30, 0.30, 0.65),   # failed      — red
+    0: (0.00, 0.00, 0.00, 0.00),   # untouched   -- transparent
+    1: (1.00, 0.95, 0.20, 0.55),   # in-progress -- yellow
+    2: (0.65, 0.65, 0.65, 0.45),   # complete    -- gray
+    3: (0.92, 0.30, 0.30, 0.65),   # failed      -- red
 }
 
 DRONE_COLOURS = [
@@ -61,7 +61,7 @@ DRONE_COLOURS = [
     "#00838f",  # teal
 ]
 
-# State → (face_colour, alpha)
+# State -> (face_colour, alpha)
 STATE_STYLE: Dict[str, tuple] = {
     "spraying" : (None,      1.0),
     "idle"     : (None,      0.5),
@@ -86,7 +86,7 @@ def _coverage_pct(grid: List[List[int]],
     grid:
         2-D list of cell states.
     n_plantable:
-        Denominator override — total number of plantable (soil mask) cells.
+        Denominator override -- total number of plantable (soil mask) cells.
         When provided, coverage is expressed as a fraction of the viable area
         rather than the full grid.  Pass ``sum(len(s.spray_cells) for s in strips)``
         from the calling code.  When None (default), the full grid is used as
@@ -145,15 +145,15 @@ def animate(
         show            : Whether to call plt.show().
         dock_positions  : List of (row, col) dock locations. If None, inferred
                           from drone states.
-        background_image: Optional H×W×3 uint8 or float32 numpy array of the
+        background_image: Optional HxWx3 uint8 or float32 numpy array of the
                           aerial photograph, already cropped and resized to
-                          (nrows × ncols) pixels. When provided, the animation
+                          (nrows x ncols) pixels. When provided, the animation
                           renders in overlay mode: aerial photo as background,
                           semi-transparent coverage tints on top.
                           Use load_image_as_array() from src.field.ingest to
                           get the correctly aligned image.
         show_grid_lines : Draw white cell borders. Defaults to True for grids
-                          ≤ 64 cells per side, False for larger grids.
+                          <= 64 cells per side, False for larger grids.
         frame_step      : Render every Nth timestep (default 1 = every step).
                           Use e.g. 10 to cut a 2000-step sim to 200 frames.
         max_frames      : If set, auto-compute frame_step so the GIF has at most
@@ -161,7 +161,7 @@ def animate(
         show_seed_drops : If True, render a static scatter of all seed drop
                           positions (from state_history["seed_drops"]) as a
                           translucent purple cloud on the grid.  Zero per-frame
-                          cost — drawn once before the animation loop.
+                          cost -- drawn once before the animation loop.
         mode_label      : Title prefix shown in every frame (e.g.
                           "Mangrove Reforestation Mission").
         n_plantable_cells: Total number of plantable (soil mask) cells.
@@ -250,7 +250,7 @@ def animate(
                      fontsize=max(5, dock_marker_size - 3),
                      color="white", fontweight="bold", zorder=8)
 
-    # Seed drop scatter (reforestation mode — static, drawn once)
+    # Seed drop scatter (reforestation mode -- static, drawn once)
     if show_seed_drops:
         all_xs, all_ys = [], []
         for state in state_history:
@@ -299,7 +299,7 @@ def animate(
                    fontsize=6.5, framealpha=0.85)
 
     # Pre-compute cumulative seeds planted up to each frame index
-    # (empty list when no seed data — backward-compatible)
+    # (empty list when no seed data -- backward-compatible)
     _cumulative_seeds: List[int] = []
     _running = 0
     for _s in state_history:
@@ -337,10 +337,10 @@ def animate(
             circle.set_facecolor(face_colour)
             circle.set_alpha(style[1])
 
-        # Coverage — use plantable denominator when available
+        # Coverage -- use plantable denominator when available
         cov         = _coverage_pct(state["grid"], n_plantable_cells)
         replan_flag = " [REPLAN]" if t in replan_steps else ""
-        event_str   = state.get("event") or "—"
+        event_str   = state.get("event") or "--"
         if len(event_str) > 38:
             event_str = event_str[:35] + "..."
 
@@ -372,7 +372,7 @@ def animate(
         )
         info_text.set_text(info_lines)
 
-        # Title — show seeds + soil-seeded % in reforestation mode
+        # Title -- show seeds + soil-seeded % in reforestation mode
         if _seed_mode:
             title = (
                 f"{mode_label}  |  t={t}  |  "

@@ -24,14 +24,14 @@ from src.field.generator import Strip
 @dataclass
 class DroneSpec:
     id: int
-    battery: float = 100.0        # percentage (0–100)
-    spray_capacity: float = 100.0 # percentage (0–100) — spraying mode
-    seed_capacity: int = 6000     # seeds per voyage   — reforestation mode
+    battery: float = 100.0        # percentage (0-100)
+    spray_capacity: float = 100.0 # percentage (0-100) -- spraying mode
+    seed_capacity: int = 6000     # seeds per voyage   -- reforestation mode
 
 
 @dataclass
 class AssignmentResult:
-    assignment: Dict[int, List[int]]   # drone_id → [strip_ids]
+    assignment: Dict[int, List[int]]   # drone_id -> [strip_ids]
     makespan: float                    # seconds
     objective_value: float
     objective_mode: str

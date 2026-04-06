@@ -5,28 +5,28 @@ Two sources are supported:
 
 1. Aerial imagery (JPG / JPEG / JFIF)
    ----------------------------------
-   load_image_grid()       — single image → priority grid
-   load_image_directory()  — batch-load all images in a folder
+   load_image_grid()       -- single image -> priority grid
+   load_image_directory()  -- batch-load all images in a folder
 
    Channel options:
-     'green'        — raw green channel / 255  (best default for RGB aerials)
-     'pseudo_ndvi'  — (G − R) / (G + R + ε), normalised to [0, 1]
+     'green'        -- raw green channel / 255  (best default for RGB aerials)
+     'pseudo_ndvi'  -- (G - R) / (G + R + eps), normalised to [0, 1]
                       (approximates NDVI from RGB; separates green veg from soil)
-     'grayscale'    — perceptual luminance
-     'red' / 'blue' — raw single channels
+     'grayscale'    -- perceptual luminance
+     'red' / 'blue' -- raw single channels
 
-   target_size controls the output grid resolution (e.g. 64 → 64×64).
+   target_size controls the output grid resolution (e.g. 64 -> 64x64).
    For non-square images the longer axis is cropped to the shorter one
    (centre crop) before resizing, preserving square cells.
 
-   invert=True flips the priority surface — useful when bright = stressed crop
+   invert=True flips the priority surface -- useful when bright = stressed crop
    rather than dense/healthy crop.
 
 2. Winnipeg Cropland Dataset (tabular, not needed for image workflow)
    ------------------------------------------------------------------
-   load_cropland_grid()    — load WinnipegDataset.txt → priority grid
+   load_cropland_grid()    -- load WinnipegDataset.txt -> priority grid
 
-   Crop → priority mapping
+   Crop -> priority mapping
    -----------------------
    Priority represents spray urgency / treatment value for that crop type.
    Defaults are agronomy-informed estimates; pass custom_priority_map to override.
@@ -79,34 +79,34 @@ def load_image_grid(
     Load an aerial cropland image and return a 2D priority grid.
 
     The image is centre-cropped to a square (to preserve aspect ratio of
-    individual cells), then downsampled to (target_size × target_size).
+    individual cells), then downsampled to (target_size x target_size).
     The chosen channel is extracted and normalised to [0, 1].
 
     Args:
         path        : Path to the image file (JPG / JPEG / JFIF / PNG / TIFF).
         target_size : Output grid dimension in cells (both rows and cols).
-                      64 → 64×64 grid, 128 → 128×128, etc.
-        channel     : Pixel→priority mapping strategy.
-                        'green'       — green channel / 255
-                        'pseudo_ndvi' — (G−R)/(G+R+ε), normalised to [0,1]
-                        'grayscale'   — perceptual luminance (0.299R+0.587G+0.114B)
-                        'red'         — red channel / 255
-                        'blue'        — blue channel / 255
-        invert      : If True, flip the priority surface (1 − p).
+                      64 -> 64x64 grid, 128 -> 128x128, etc.
+        channel     : Pixel->priority mapping strategy.
+                        'green'       -- green channel / 255
+                        'pseudo_ndvi' -- (G-R)/(G+R+eps), normalised to [0,1]
+                        'grayscale'   -- perceptual luminance (0.299R+0.587G+0.114B)
+                        'red'         -- red channel / 255
+                        'blue'        -- blue channel / 255
+        invert      : If True, flip the priority surface (1 - p).
                       Use when bright pixels = low-priority (e.g. bare soil,
                       dry zones) rather than dense/healthy vegetation.
 
     Returns:
         (grid, meta) where:
-            grid : List[List[float]] — 2D priority grid, values in [0, 1].
+            grid : List[List[float]] -- 2D priority grid, values in [0, 1].
             meta : dict with keys:
-                     nrows, ncols    — output grid dimensions (both = target_size)
-                     source_size     — (width, height) of the original image
-                     crop_box        — (left, top, right, bottom) square crop applied
-                     channel         — channel strategy used
-                     invert          — whether the surface was inverted
-                     mean_priority   — mean of the output grid
-                     path            — source file path
+                     nrows, ncols    -- output grid dimensions (both = target_size)
+                     source_size     -- (width, height) of the original image
+                     crop_box        -- (left, top, right, bottom) square crop applied
+                     channel         -- channel strategy used
+                     invert          -- whether the surface was inverted
+                     mean_priority   -- mean of the output grid
+                     path            -- source file path
     """
     try:
         from PIL import Image
@@ -128,7 +128,7 @@ def load_image_grid(
     bottom = top + side
     img = img.crop((left, top, right, bottom))
 
-    # --- Resize to target_size × target_size ---
+    # --- Resize to target_size x target_size ---
     img = img.resize((target_size, target_size), Image.LANCZOS)
 
     # --- Extract chosen channel ---
@@ -187,13 +187,13 @@ def load_image_directory(
 
     Args:
         dir_path   : Directory containing image files.
-        target_size: Output grid size (cells per side) — passed to load_image_grid.
-        channel    : Channel strategy — passed to load_image_grid.
-        invert     : Invert priority surface — passed to load_image_grid.
+        target_size: Output grid size (cells per side) -- passed to load_image_grid.
+        channel    : Channel strategy -- passed to load_image_grid.
+        invert     : Invert priority surface -- passed to load_image_grid.
         extensions : File extensions to include (default: jpg/jpeg/jfif/png/tif/tiff).
 
     Returns:
-        OrderedDict mapping filename stem → (grid, meta), sorted alphabetically.
+        OrderedDict mapping filename stem -> (grid, meta), sorted alphabetically.
     """
     exts = set(extensions) if extensions else _IMAGE_EXTENSIONS
     folder = Path(dir_path)
@@ -215,7 +215,7 @@ def load_image_directory(
                 channel=channel, invert=invert,
             )
             results[f.stem] = (grid, meta)
-            print(f"  {f.name:<40}  {target_size}×{target_size}  "
+            print(f"  {f.name:<40}  {target_size}x{target_size}  "
                   f"mean_priority={meta['mean_priority']:.3f}")
         except Exception as exc:
             print(f"  SKIP {f.name}: {exc}")
@@ -229,7 +229,7 @@ def load_image_as_array(
     target_size: int = 64,
 ) -> np.ndarray:
     """
-    Load an aerial image as a uint8 RGB numpy array (H × W × 3),
+    Load an aerial image as a uint8 RGB numpy array (H x W x 3),
     applying the same centre-crop and resize as load_image_grid().
 
     Use this to get the background image for the overlay renderer:
@@ -309,7 +309,7 @@ def load_cropland_grid(
         path               : Path to WinnipegDataset.txt.
         ncols              : Number of columns in the original raster. If None,
                              estimated as sqrt(total pixels).
-        tile_size          : If set, extract a (tile_size × tile_size) tile from
+        tile_size          : If set, extract a (tile_size x tile_size) tile from
                              the reconstructed grid, starting at tile_origin.
                              Overrides ncols-based full-grid output.
         tile_origin        : (row, col) top-left corner of the tile in the
@@ -318,18 +318,18 @@ def load_cropland_grid(
                              1 = no downsampling.
         label_col          : Column index of the crop class label. If None,
                              auto-detected (tries last column, then first).
-        custom_priority_map: Override default crop → priority mapping.
+        custom_priority_map: Override default crop -> priority mapping.
         max_rows_to_read   : Cap on rows read from file (useful for quick tests).
 
     Returns:
         (grid, meta) where:
-            grid : List[List[float]] — 2D priority grid, values in [0, 1].
+            grid : List[List[float]] -- 2D priority grid, values in [0, 1].
             meta : dict with keys:
-                     nrows, ncols         — final grid dimensions
-                     crop_counts          — {crop_name: pixel_count}
-                     priority_map         — crop_id → priority used
-                     tile_origin          — (row, col) used
-                     source_pixels        — total pixels in source before tile/downsample
+                     nrows, ncols         -- final grid dimensions
+                     crop_counts          -- {crop_name: pixel_count}
+                     priority_map         -- crop_id -> priority used
+                     tile_origin          -- (row, col) used
+                     source_pixels        -- total pixels in source before tile/downsample
     """
     priority_map = {**DEFAULT_PRIORITY_MAP, **(custom_priority_map or {})}
     filepath     = Path(path)
@@ -354,7 +354,7 @@ def load_cropland_grid(
         dtype=np.float32,
     )
     n_pixels, n_cols_total = df.shape
-    print(f"  {n_pixels:,} pixels × {n_cols_total} columns loaded")
+    print(f"  {n_pixels:,} pixels x {n_cols_total} columns loaded")
 
     # ------------------------------------------------------------------
     # 2. Identify label column
@@ -370,7 +370,7 @@ def load_cropland_grid(
     # ------------------------------------------------------------------
     if ncols is None:
         ncols = int(round(math.sqrt(n_pixels)))
-        print(f"  ncols not specified — using sqrt({n_pixels}) ≈ {ncols}")
+        print(f"  ncols not specified -- using sqrt({n_pixels}) ~= {ncols}")
     nrows_full = math.ceil(n_pixels / ncols)
 
     # Pad labels to fill the last row if needed
@@ -379,7 +379,7 @@ def load_cropland_grid(
         labels = np.concatenate([labels, np.zeros(pad, dtype=int)])
 
     label_grid = labels.reshape(nrows_full, ncols)
-    print(f"  Reconstructed raster: {nrows_full} × {ncols}")
+    print(f"  Reconstructed raster: {nrows_full} x {ncols}")
 
     # ------------------------------------------------------------------
     # 4. Tile extraction
@@ -389,7 +389,7 @@ def load_cropland_grid(
         r1 = min(r0 + tile_size, nrows_full)
         c1 = min(c0 + tile_size, ncols)
         label_grid = label_grid[r0:r1, c0:c1]
-        print(f"  Tile [{r0}:{r1}, {c0}:{c1}] → {label_grid.shape}")
+        print(f"  Tile [{r0}:{r1}, {c0}:{c1}] -> {label_grid.shape}")
     else:
         label_grid = label_grid[r0:, c0:]
 
@@ -398,10 +398,10 @@ def load_cropland_grid(
     # ------------------------------------------------------------------
     if downsample > 1:
         label_grid = label_grid[::downsample, ::downsample]
-        print(f"  Downsampled ×{downsample} → {label_grid.shape}")
+        print(f"  Downsampled x{downsample} -> {label_grid.shape}")
 
     # ------------------------------------------------------------------
-    # 6. Map crop labels → priority values
+    # 6. Map crop labels -> priority values
     # ------------------------------------------------------------------
     priority_grid_arr = np.zeros(label_grid.shape, dtype=float)
     for crop_id, priority in priority_map.items():
@@ -432,7 +432,7 @@ def load_cropland_grid(
         "downsample"    : downsample,
     }
 
-    print(f"  Output grid: {final_nrows} × {final_ncols} ({final_nrows * final_ncols:,} cells)")
+    print(f"  Output grid: {final_nrows} x {final_ncols} ({final_nrows * final_ncols:,} cells)")
     print(f"  Crops present: {list(crop_counts.keys())}")
     return grid, meta
 
@@ -443,7 +443,7 @@ def load_cropland_grid(
 
 def _detect_label_col(df: pd.DataFrame) -> int:
     """
-    Heuristic: the label column contains small positive integers (1–7).
+    Heuristic: the label column contains small positive integers (1-7).
     Try last column first (most common convention), then first column.
     """
     for col_idx in [df.shape[1] - 1, 0]:
@@ -464,16 +464,16 @@ def describe_grid(grid: List[List[float]], meta: Dict) -> None:
     """Print a human-readable summary of a loaded priority grid."""
     arr   = np.array(grid)
     print(f"\nGrid summary")
-    print(f"  Shape         : {arr.shape[0]} rows × {arr.shape[1]} cols")
-    print(f"  Priority range: {arr.min():.2f} – {arr.max():.2f}")
+    print(f"  Shape         : {arr.shape[0]} rows x {arr.shape[1]} cols")
+    print(f"  Priority range: {arr.min():.2f} - {arr.max():.2f}")
     print(f"  Mean priority : {arr.mean():.3f}")
     print(f"\nCrop distribution:")
     total = sum(meta["crop_counts"].values())
     for crop, count in sorted(meta["crop_counts"].items(),
                               key=lambda x: x[1], reverse=True):
         pct = 100.0 * count / total if total else 0
-        bar = "█" * int(pct / 2)
+        bar = "#" * int(pct / 2)
         print(f"  {crop:<12} {count:>6,}  ({pct:4.1f}%)  {bar}")
     print(f"\nPriority weights used:")
     for crop, w in meta["priority_map"].items():
-        print(f"  {crop:<12} → {w}")
+        print(f"  {crop:<12} -> {w}")
