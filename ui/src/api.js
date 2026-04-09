@@ -13,15 +13,14 @@ async function post(path, body) {
   return res.json()
 }
 
-export function getSyntheticField(params) {
-  return post('/field/synthetic', params)
-}
-
 export async function uploadField(file, params) {
   const form = new FormData()
   form.append('file', file)
   const url = new URL(`${BASE}/field/upload`, window.location.href)
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)))
+  // Pass all params (including soil detection thresholds) as query params
+  Object.entries(params).forEach(([k, v]) => {
+    if (v != null) url.searchParams.set(k, String(v))
+  })
   const res = await fetch(url.toString(), { method: 'POST', body: form })
   if (!res.ok) throw new Error(await res.text())
   return res.json()

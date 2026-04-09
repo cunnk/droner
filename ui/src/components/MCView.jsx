@@ -29,8 +29,8 @@ function makeHistogram(values, nBins = 15) {
 
 // ── Config column ─────────────────────────────────────────────────────────────
 
-function ConfigCol({ title, nDrones, failureProb, nRuns, batteryDrainMax,
-                     onDrones, onFailureProb, onRuns, onBattery }) {
+function ConfigCol({ title, nDrones, seedSpacingM, windSpeed, nRuns,
+                     onDrones, onSeedSpacing, onWindSpeed, onRuns }) {
   return (
     <div className="mc-config-col">
       <div className="mc-config-col-title">{title}</div>
@@ -46,22 +46,20 @@ function ConfigCol({ title, nDrones, failureProb, nRuns, batteryDrainMax,
 
       <div className="field-group">
         <div className="field-label">
-          <span>Failure probability</span>
-          <span className="field-value">
-            {failureProb === 0 ? 'off' : `${(failureProb * 100).toFixed(1)}%`}
-          </span>
+          <span>Seed spacing</span>
+          <span className="field-value">{seedSpacingM.toFixed(1)} m</span>
         </div>
-        <input type="range" min={0} max={0.05} step={0.005} value={failureProb}
-          onChange={(e) => onFailureProb(Number(e.target.value))} />
+        <input type="range" min={0.5} max={3.0} step={0.1} value={seedSpacingM}
+          onChange={(e) => onSeedSpacing(Number(e.target.value))} />
       </div>
 
       <div className="field-group">
         <div className="field-label">
-          <span>Max battery drain / cell</span>
-          <span className="field-value">{batteryDrainMax === 0 ? 'off' : `${batteryDrainMax}%`}</span>
+          <span>Wind speed</span>
+          <span className="field-value">{windSpeed === 0 ? 'calm' : `${windSpeed} m/s`}</span>
         </div>
-        <input type="range" min={0} max={10} step={0.5} value={batteryDrainMax}
-          onChange={(e) => onBattery(Number(e.target.value))} />
+        <input type="range" min={0} max={15} step={1} value={windSpeed}
+          onChange={(e) => onWindSpeed(Number(e.target.value))} />
       </div>
 
       <div className="field-group">
@@ -138,14 +136,14 @@ function CustomTooltip({ active, payload, label }) {
 export default function MCView({ field, config, onConfigChange }) {
   const [configA, setConfigA] = useState({
     nDrones: config.nDrones ?? 3,
-    failureProb: 0.01,
-    batteryDrainMax: 3.0,
+    seedSpacingM: config.seedSpacingM ?? 1.5,
+    windSpeed: 0,
     nRuns: 50,
   })
   const [configB, setConfigB] = useState({
     nDrones: Math.min(8, (config.nDrones ?? 3) + 2),
-    failureProb: 0.01,
-    batteryDrainMax: 3.0,
+    seedSpacingM: Math.max(0.5, (config.seedSpacingM ?? 1.5) - 0.5),
+    windSpeed: 0,
     nRuns: 50,
   })
 
@@ -178,14 +176,23 @@ export default function MCView({ field, config, onConfigChange }) {
     const cancel = streamMonteCarlo(
       {
         grid: field.grid,
+        soil_mask: field.soil_mask ?? null,
         nrows: field.nrows,
         ncols: field.ncols,
         n_drones: cfg.nDrones,
         dock_positions: config.dockPositions ?? [[0, 0]],
         orientation_deg: config.orientationDeg ?? 0,
+        strip_mode: config.stripMode ?? 'lawnmower',
+        strip_width: config.stripWidth ?? 2,
         n_runs: cfg.nRuns,
-        failure_prob: cfg.failureProb,
-        battery_drain_max: cfg.batteryDrainMax,
+        seed_spacing_m: cfg.seedSpacingM,
+        wind_speed_ms: cfg.windSpeed,
+        battery_life_minutes: config.batteryLifeMin ?? 35,
+        recharge_time_minutes: config.rechargeTimeMin ?? 60,
+        seed_capacity: config.seedCapacity ?? 6000,
+        seed_jitter_sigma: config.seedJitter ?? 0.3,
+        failure_prob: config.failureProb ?? 0,
+        survival_rate: config.survivalRate ?? 0.4,
         seconds_per_cell: config.secondsPerCell ?? 2.0,
         seed: 42,
       },
@@ -234,24 +241,24 @@ export default function MCView({ field, config, onConfigChange }) {
         <ConfigCol
           title={`Config A — ${configA.nDrones} drones`}
           nDrones={configA.nDrones}
-          failureProb={configA.failureProb}
+          seedSpacingM={configA.seedSpacingM}
+          windSpeed={configA.windSpeed}
           nRuns={configA.nRuns}
-          batteryDrainMax={configA.batteryDrainMax}
           onDrones={(v) => setConfigA((c) => ({ ...c, nDrones: v }))}
-          onFailureProb={(v) => setConfigA((c) => ({ ...c, failureProb: v }))}
+          onSeedSpacing={(v) => setConfigA((c) => ({ ...c, seedSpacingM: v }))}
+          onWindSpeed={(v) => setConfigA((c) => ({ ...c, windSpeed: v }))}
           onRuns={(v) => setConfigA((c) => ({ ...c, nRuns: v }))}
-          onBattery={(v) => setConfigA((c) => ({ ...c, batteryDrainMax: v }))}
         />
         <ConfigCol
           title={`Config B — ${configB.nDrones} drones`}
           nDrones={configB.nDrones}
-          failureProb={configB.failureProb}
+          seedSpacingM={configB.seedSpacingM}
+          windSpeed={configB.windSpeed}
           nRuns={configB.nRuns}
-          batteryDrainMax={configB.batteryDrainMax}
           onDrones={(v) => setConfigB((c) => ({ ...c, nDrones: v }))}
-          onFailureProb={(v) => setConfigB((c) => ({ ...c, failureProb: v }))}
+          onSeedSpacing={(v) => setConfigB((c) => ({ ...c, seedSpacingM: v }))}
+          onWindSpeed={(v) => setConfigB((c) => ({ ...c, windSpeed: v }))}
           onRuns={(v) => setConfigB((c) => ({ ...c, nRuns: v }))}
-          onBattery={(v) => setConfigB((c) => ({ ...c, batteryDrainMax: v }))}
         />
       </div>
 
@@ -314,7 +321,7 @@ export default function MCView({ field, config, onConfigChange }) {
           <div style={{ fontSize: 28, opacity: 0.3 }}>📊</div>
           <div>Run an analysis to see reliability distributions</div>
           <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-            Compare two fleet configs to answer: "is the 5th drone worth it?"
+            Compare two fleet configs: drones, seed spacing, wind conditions
           </div>
         </div>
       )}
@@ -323,7 +330,7 @@ export default function MCView({ field, config, onConfigChange }) {
         <>
           {/* Coverage histogram */}
           <div className="mc-chart-card">
-            <div className="mc-chart-title">Coverage Distribution (% field covered)</div>
+            <div className="mc-chart-title">Seeding Distribution (% plantable cells covered)</div>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={histData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -348,25 +355,33 @@ export default function MCView({ field, config, onConfigChange }) {
             {resultA && (
               <div className="mc-chart-card">
                 <div className="mc-chart-title" style={{ color: '#4f8ef7' }}>
-                  Config A — {configA.nDrones} drones
+                  Config A — {configA.nDrones} drones · {configA.seedSpacingM.toFixed(1)} m spacing
                 </div>
                 <StatsRow result={resultA} />
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-                  Avg recovery: <strong>{resultA.recovery_mean?.toFixed(1)} steps</strong>
-                  {' '}· P95: <strong>{resultA.recovery_p95?.toFixed(0)} steps</strong>
-                </div>
+                {resultA.seeds_median != null && (
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+                    Seeds (median): <strong>{Math.round(resultA.seeds_median).toLocaleString()}</strong>
+                    {resultA.survivors_median != null && (
+                      <>{' '}· Survivors: <strong>{Math.round(resultA.survivors_median).toLocaleString()}</strong></>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {resultB && (
               <div className="mc-chart-card">
                 <div className="mc-chart-title" style={{ color: '#7c4ef7' }}>
-                  Config B — {configB.nDrones} drones
+                  Config B — {configB.nDrones} drones · {configB.seedSpacingM.toFixed(1)} m spacing
                 </div>
                 <StatsRow result={resultB} />
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-                  Avg recovery: <strong>{resultB.recovery_mean?.toFixed(1)} steps</strong>
-                  {' '}· P95: <strong>{resultB.recovery_p95?.toFixed(0)} steps</strong>
-                </div>
+                {resultB.seeds_median != null && (
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
+                    Seeds (median): <strong>{Math.round(resultB.seeds_median).toLocaleString()}</strong>
+                    {resultB.survivors_median != null && (
+                      <>{' '}· Survivors: <strong>{Math.round(resultB.survivors_median).toLocaleString()}</strong></>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -383,11 +398,16 @@ export default function MCView({ field, config, onConfigChange }) {
                 const deltaP5 = resultB.coverage_p5 - resultA.coverage_p5
                 const deltaMedian = resultB.coverage_p50 - resultA.coverage_p50
                 const dronesDelta = configB.nDrones - configA.nDrones
+                const spacingDelta = configA.seedSpacingM - configB.seedSpacingM
                 if (Math.abs(deltaP5) < 2 && Math.abs(deltaMedian) < 2) {
-                  return `Adding ${Math.abs(dronesDelta)} drone${Math.abs(dronesDelta) > 1 ? 's' : ''} has minimal impact under these failure conditions.`
+                  const droneStr = dronesDelta !== 0
+                    ? `Adding ${Math.abs(dronesDelta)} drone${Math.abs(dronesDelta) > 1 ? 's' : ''}`
+                    : 'Config B'
+                  return `${droneStr} has minimal impact on coverage under these conditions.`
                 }
                 const dir = deltaP5 > 0 ? 'improves' : 'reduces'
-                return `Config B ${dir} worst-case coverage by ${Math.abs(deltaP5).toFixed(1)}pp (P5). ` +
+                const note = spacingDelta > 0.1 ? ` (tighter spacing: ${configB.seedSpacingM.toFixed(1)} m)` : ''
+                return `Config B ${dir} worst-case seeding by ${Math.abs(deltaP5).toFixed(1)}pp (P5)${note}. ` +
                   `Median shifts ${deltaMedian > 0 ? '+' : ''}${deltaMedian.toFixed(1)}pp.`
               })()}
             </div>

@@ -60,8 +60,8 @@ TOOLS = [
     {
         "name": "get_weather_alert",
         "description": (
-            "Check for active weather alerts. "
-            "If alert is true, minutes_remaining tells you how long the mission window is. "
+            "Check for active tidal surge alerts. "
+            "If alert is true, minutes_remaining tells you how long the planting window is. "
             "You must replan immediately using time_budget_seconds = minutes_remaining * 60."
         ),
         "input_schema": {"type": "object", "properties": {}},
@@ -69,8 +69,8 @@ TOOLS = [
     {
         "name": "arm_mandatory_zones",
         "description": (
-            "Designate the highest-priority strips as mandatory — they must be completed "
-            "before storm arrival. Call this before replanning when a weather alert is active."
+            "Designate the highest-priority mudflat strips as mandatory — they must be seeded "
+            "before tidal surge arrival. Call this before replanning when a tidal alert is active."
         ),
         "input_schema": {
             "type": "object",
@@ -97,9 +97,9 @@ TOOLS = [
     {
         "name": "replan_with_deadline",
         "description": (
-            "Replan the mission with a hard time cap per drone, switching to "
-            "priority-weighted objective so the most important strips are sprayed first. "
-            "Use time_budget_seconds = minutes_remaining * 60 when a storm is approaching."
+            "Replan the seeding mission with a hard time cap per drone, switching to "
+            "priority-weighted objective so the highest-priority mudflat strips are seeded first. "
+            "Use time_budget_seconds = minutes_remaining * 60 when a tidal surge is approaching."
         ),
         "input_schema": {
             "type": "object",
@@ -150,8 +150,8 @@ TOOLS = [
     {
         "name": "get_field_events",
         "description": (
-            "Check for field reports (pest sightings, sensor alerts, worker reports). "
-            "Call this periodically when field_events are enabled."
+            "Check for tidal block reports (newly submerged zones, sensor alerts). "
+            "Call this periodically when tidal block events are enabled."
         ),
         "input_schema": {
             "type": "object",
@@ -268,15 +268,26 @@ def sse(data: dict) -> str:
 class AdaptRequest(BaseModel):
     # Field / fleet config (mirrors SimulateRequest)
     grid: List[List[float]]
+    soil_mask: Optional[List[List[bool]]] = None
     nrows: int
     ncols: int
     n_drones: int = 3
     dock_positions: List[List[int]] = [[0, 0]]
     orientation_deg: float = 0.0
+    strip_mode: str = "lawnmower"
+    strip_width: int = 2
     seconds_per_cell: float = 2.0
-    battery_drain: float = 0.0
+    # Mangrove params
+    battery_life_minutes: float = 35.0
+    recharge_time_minutes: float = 60.0
+    seed_capacity: int = 6000
+    seed_spacing_m: float = 1.5
+    seed_jitter_sigma: float = 0.3
+    wind_speed_ms: float = 0.0
+    failure_prob: float = 0.0
+    survival_rate: float = 0.4
 
-    # MCP-specific
+    # MCP-specific (tidal events)
     weather_enabled: bool = True
     weather_minutes: float = 8.0
     field_events_enabled: bool = False
@@ -302,13 +313,33 @@ async def adapt_stream(req: AdaptRequest):
 
         # ── 1. Build session ───────────────────────────────────────────────
         def _setup():
+            from src.field.contour import generate_contour_strips
+            from src.reforestation.config import MissionConfig, compute_sim_params
             grid_np = np.array(req.grid)
-            strips = generate_strips(
-                grid_np,
+            mask_np = np.array(req.soil_mask, dtype=bool) if req.soil_mask else None
+            if req.strip_mode == "contour" and mask_np is not None:
+                strips = generate_contour_strips(
+                    soil_mask=mask_np, priority_grid=grid_np,
+                    strip_width=req.strip_width,
+                    max_cells_per_strip=max(10, req.seed_capacity - 20),
+                    seconds_per_cell=req.seconds_per_cell,
+                )
+            else:
+                strips = generate_strips(
+                    grid_np, seconds_per_cell=req.seconds_per_cell,
+                    orientation_deg=req.orientation_deg, field_mask=mask_np,
+                )
+            cfg = MissionConfig(
+                seed_capacity=req.seed_capacity, seed_spacing_m=req.seed_spacing_m,
+                seed_jitter_sigma=req.seed_jitter_sigma,
+                battery_life_minutes=req.battery_life_minutes,
+                recharge_time_seconds=req.recharge_time_minutes * 60.0,
+                wind_speed_ms=req.wind_speed_ms, survival_rate=req.survival_rate,
                 seconds_per_cell=req.seconds_per_cell,
-                orientation_deg=req.orientation_deg,
             )
-            drones = [DroneSpec(id=i, battery=100.0) for i in range(req.n_drones)]
+            _sim_params = compute_sim_params(cfg, ncols=req.ncols)
+            drones = [DroneSpec(id=i, battery=100.0, seed_capacity=req.seed_capacity)
+                      for i in range(req.n_drones)]
             context = PlannerContext(time_budget_seconds=10.0)
             result = plan(strips, drones, context=context)
             dock_tuples = [tuple(d) for d in req.dock_positions]
@@ -328,9 +359,9 @@ async def adapt_stream(req: AdaptRequest):
                 "field_events": [],
                 "dock_positions": dock_tuples,
             })
-            return run_id, result.makespan
+            return run_id, result.makespan, _sim_params
 
-        run_id, makespan_est = await asyncio.to_thread(_setup)
+        run_id, makespan_est, sim_params = await asyncio.to_thread(_setup)
 
         # ── 1b. Compute storm timestep & run REAL baseline simulation ──────
         # Convert weather minutes → simulation timesteps (same units as simulate())
@@ -349,7 +380,11 @@ async def adapt_stream(req: AdaptRequest):
                 "must_complete_strip_ids": [],
                 "field_events": [],
             })
-            mcp_tools.run_simulation(bl_id, battery_drain_per_cell=req.battery_drain)
+            mcp_tools.run_simulation(
+                bl_id,
+                battery_drain_per_cell=sim_params["battery_drain_per_cell"],
+                recharge_time_steps=sim_params["recharge_time_steps"],
+            )
             bl_hist = state_store.get_run(bl_id).get("state_history") or []
             strips = orig["strips"]
             nrows, ncols = orig["nrows"], orig["ncols"]
@@ -385,8 +420,8 @@ async def adapt_stream(req: AdaptRequest):
         # ── 2. Arm weather alert ───────────────────────────────────────────
         weather_module.disarm_alert()
         if req.weather_enabled:
-            weather_module.arm_alert(req.weather_minutes, f"Storm approaching — {req.weather_minutes:.0f} min window")
-            yield sse({"type": "system", "text": f"⛈ Weather alert armed: {req.weather_minutes:.0f} min until storm arrival"})
+            weather_module.arm_alert(req.weather_minutes, f"Tidal surge approaching — {req.weather_minutes:.0f} min planting window")
+            yield sse({"type": "system", "text": f"🌊 Tidal surge alert armed: {req.weather_minutes:.0f} min until surge arrival"})
 
         # ── 3. Arm field events ────────────────────────────────────────────
         if req.field_events_enabled:
@@ -400,39 +435,41 @@ async def adapt_stream(req: AdaptRequest):
 
             events = await asyncio.to_thread(_gen_events)
             state_store.update_run(run_id, field_events=events)
-            yield sse({"type": "system", "text": f"📡 {len(events)} field events armed (pest sightings, sensor alerts)"})
+            yield sse({"type": "system", "text": f"🌊 {len(events)} tidal block events armed (submerged zones, sensor alerts)"})
 
         # ── 4. Build initial user message ──────────────────────────────────
         field_events_note = (
-            "\nField events are armed — poll get_field_events periodically."
+            "\nTidal block events are armed — poll get_field_events periodically to discover newly submerged zones."
             if req.field_events_enabled else ""
         )
         weather_note = (
-            f"\nA weather alert may be active — check get_weather_alert immediately."
+            f"\nA tidal surge alert may be active — check get_weather_alert immediately."
             if req.weather_enabled else ""
         )
 
         initial_message = (
-            f"Mission started. run_id = '{run_id}'. "
-            f"Fleet: {req.n_drones} drones on a {req.nrows}×{req.ncols} field."
+            f"Reforestation mission started. run_id = '{run_id}'. "
+            f"Fleet: {req.n_drones} drones seeding a {req.nrows}×{req.ncols} coastal mudflat grid."
             f"{weather_note}{field_events_note}"
             "\n\nAssess the situation and make any necessary adjustments to maximise "
-            "priority coverage. Report your decisions and the outcome."
+            "seed coverage of high-priority mudflat zones before the tidal deadline. "
+            "Report your decisions and the outcome."
         )
 
         system_prompt = (
-            "You are a drone fleet mission coordinator for an agricultural spraying operation. "
-            "Use the available tools to monitor mission state, respond to weather alerts, and "
-            "adapt the plan to maximise coverage of high-priority strips.\n\n"
+            "You are a drone fleet coordinator for a coastal mangrove reforestation operation. "
+            "Drones carry seed hoppers and plant propagules across exposed mudflat zones. "
+            "Use the available tools to monitor seeding progress, respond to tidal surge alerts, and "
+            "adapt the plan to maximise coverage of high-priority planting zones.\n\n"
             "Decision protocol:\n"
-            "1. Call get_state to see current coverage and drone states.\n"
-            "2. Call get_weather_alert — if an alert is active, act immediately.\n"
-            "3. When a storm is approaching: call arm_mandatory_zones, then "
+            "1. Call get_state to see current seeding coverage and drone states.\n"
+            "2. Call get_weather_alert — if a tidal surge alert is active, act immediately.\n"
+            "3. When a surge is approaching: call arm_mandatory_zones (highest-priority mudflats), then "
             "replan_with_deadline(time_budget_seconds = minutes_remaining × 60).\n"
             "4. Always call run_simulation after replanning.\n"
             "5. Report the final outcome with get_metrics — include coverage_pct and "
-            "priority_coverage at the deadline.\n\n"
-            "Be concise. Explain decisions as a field operations manager would understand them."
+            "priority_coverage at the tidal deadline.\n\n"
+            "Be concise. Explain decisions as a coastal restoration operations manager would."
         )
 
         # ── 5. Agentic loop ────────────────────────────────────────────────
@@ -533,9 +570,9 @@ async def adapt_stream(req: AdaptRequest):
                 for step in history:
                     ts = step["timestep"]
                     if ts == warn_ts and not step.get("event"):
-                        step["event"] = f"⚠ Storm approaching — {req.weather_minutes:.0f} min window"
+                        step["event"] = f"⚠ Tidal surge approaching — {req.weather_minutes:.0f} min planting window"
                     elif ts >= storm_ts and not injected_arrival and not step.get("event"):
-                        step["event"] = "⛈ Storm arrived — mission window closed"
+                        step["event"] = "🌊 Tidal surge arrived — planting window closed"
                         injected_arrival = True
 
             return history, adapted_at_t, mandatory_cells, event_cells
