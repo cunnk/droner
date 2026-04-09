@@ -1,40 +1,40 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import ConfigPanel from './components/ConfigPanel.jsx'
 import SimView from './components/SimView.jsx'
 import MCView from './components/MCView.jsx'
 import MCPView from './components/MCPView.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
-import { getSyntheticField, uploadField, runSimulation } from './api.js'
+import { uploadField, runSimulation } from './api.js'
 
-// ── Utility: build a green-gradient data URL from a priority grid ─────────────
+// ── Default config ─────────────────────────────────────────────────────────────
 
-function priorityGridToDataUrl(grid) {
-  const nrows = grid.length
-  const ncols = grid[0]?.length ?? 0
-  const canvas = document.createElement('canvas')
-  canvas.width = ncols
-  canvas.height = nrows
-  const ctx = canvas.getContext('2d')
-  const id = ctx.createImageData(ncols, nrows)
-  for (let r = 0; r < nrows; r++) {
-    for (let c = 0; c < ncols; c++) {
-      const v = grid[r][c]
-      const i = (r * ncols + c) * 4
-      id.data[i]     = Math.round(20 + v * 60)   // R
-      id.data[i + 1] = Math.round(55 + v * 160)  // G
-      id.data[i + 2] = Math.round(10 + v * 40)   // B
-      id.data[i + 3] = 255
-    }
-  }
-  ctx.putImageData(id, 0, 0)
-  return canvas.toDataURL()
+const DEFAULT_CONFIG = {
+  uploadedFile:        null,
+  nDrones:             3,
+  dockPositions:       [[0, 0]],
+  stripMode:           'lawnmower',
+  stripWidth:          2,
+  orientationDeg:      0,
+  batteryLifeMin:      35,
+  rechargeTimeMin:     60,
+  seedCapacity:        6000,
+  seedSpacingM:        1.5,
+  windSpeed:           0,
+  failureProb:         0,
+  survivalRate:        0.4,
+  tidalThreshold:      0.6,
+  soilNdviThreshold:   0.15,
+  waterBlueThreshold:  0.45,
+  darkCanopyCutoff:    0.42,
+  secondsPerCell:      2.0,
+  fieldWidthM:         200,
 }
 
-// ── Flow bar ──────────────────────────────────────────────────────────────────
+// ── Flow bar ───────────────────────────────────────────────────────────────────
 
 function FlowBar({ fieldReady, baselineReady, mcpReady }) {
   const steps = [
-    { n: 1, label: 'Load field',     done: fieldReady },
+    { n: 1, label: 'Load field',      done: fieldReady },
     { n: 2, label: 'Mission baseline', done: baselineReady },
     { n: 3, label: 'AI coordination', done: mcpReady },
   ]
@@ -74,65 +74,36 @@ function FlowBar({ fieldReady, baselineReady, mcpReady }) {
   )
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── App ────────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [field, setField] = useState(null)
-  const [simResult, setSimResult] = useState(null)
-  const [activeTab, setActiveTab] = useState('sim')
-  const [showSettings, setShowSettings] = useState(false)
-  const [isRunning, setIsRunning] = useState(false)
-  const [error, setError] = useState(null)
-  const [apiOk, setApiOk] = useState(true)
-  const [mcpDone, setMcpDone] = useState(false)
-
-  const [config, setConfig] = useState({
-    fieldMode: 'synthetic',
-    uploadedFile: null,
-    seed: 42,
-    nPatches: 6,
-    nDrones: 3,
-    dockPositions: [[0, 0]],
-    orientationDeg: 0,
-    batteryDrain: 0,
-    failureProb: 0,
-    secondsPerCell: 2.0,
-    rechargeTime: 10,
-  })
+  const [field,       setField]       = useState(null)
+  const [simResult,   setSimResult]   = useState(null)
+  const [activeTab,   setActiveTab]   = useState('sim')
+  const [showSettings,setShowSettings]= useState(false)
+  const [isRunning,   setIsRunning]   = useState(false)
+  const [error,       setError]       = useState(null)
+  const [apiOk,       setApiOk]       = useState(true)
+  const [mcpDone,     setMcpDone]     = useState(false)
+  const [config,      setConfig]      = useState(DEFAULT_CONFIG)
 
   const updateConfig = useCallback((patch) => {
     setConfig(prev => ({ ...prev, ...patch }))
   }, [])
 
+  // ── Field loader (upload pipeline only) ──────────────────────────────────────
   const handleLoadField = useCallback(async (cfg) => {
+    if (!cfg.uploadedFile) return
     setError(null)
     try {
-      let data
-      if (cfg.fieldMode === 'synthetic') {
-        data = await getSyntheticField({
-          nrows: 32,
-          ncols: 32,
-          seed: cfg.seed,
-          n_patches: cfg.nPatches,
-          seconds_per_cell: cfg.secondsPerCell,
-          orientation_deg: cfg.orientationDeg,
-        })
-        // Generate background image client-side for synthetic fields
-        data.image_data_url = priorityGridToDataUrl(data.grid)
-        data.estimated_orientation_deg = null
-        data.orientation_confidence = 0
-      } else if (cfg.uploadedFile) {
-        data = await uploadField(cfg.uploadedFile, {
-          target_size: 32,
-          channel: 'green',
-          orientation_deg: cfg.orientationDeg,
-          seconds_per_cell: cfg.secondsPerCell,
-        })
-        // image_data_url, estimated_orientation_deg, orientation_confidence
-        // come from the backend for uploaded fields
-      } else {
-        return
-      }
+      const data = await uploadField(cfg.uploadedFile, {
+        target_size:               64,
+        orientation_deg:           cfg.orientationDeg,
+        seconds_per_cell:          cfg.secondsPerCell,
+        soil_ndvi_threshold:       cfg.soilNdviThreshold,
+        water_blue_threshold:      cfg.waterBlueThreshold,
+        min_brightness_threshold:  cfg.darkCanopyCutoff,
+      })
       setField(data)
       setSimResult(null)
     } catch (e) {
@@ -141,6 +112,20 @@ export default function App() {
     }
   }, [])
 
+  // ── Auto-load bundled sample on first mount ───────────────────────────────────
+  useEffect(() => {
+    fetch('/sample/jubail.jpg')
+      .then(r => { if (!r.ok) throw new Error('no sample'); return r.blob() })
+      .then(blob => {
+        const file = new File([blob], 'jubail.jpg', { type: 'image/jpeg' })
+        const cfg  = { ...DEFAULT_CONFIG, uploadedFile: file }
+        setConfig(cfg)
+        handleLoadField(cfg)
+      })
+      .catch(() => { /* no sample image — user uploads manually */ })
+  }, [handleLoadField])
+
+  // ── Run simulation ────────────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {
     if (!field) return
     setIsRunning(true)
@@ -148,17 +133,25 @@ export default function App() {
     setSimResult(null)
     try {
       const result = await runSimulation({
-        grid: field.grid,
-        nrows: field.nrows,
-        ncols: field.ncols,
-        n_drones: config.nDrones,
-        dock_positions: config.dockPositions,
-        orientation_deg: config.orientationDeg,
-        battery_drain: config.batteryDrain,
-        failure_prob: config.failureProb,
-        seconds_per_cell: config.secondsPerCell,
-        recharge_time: config.rechargeTime,
-        seed: config.seed,
+        grid:                  field.grid,
+        soil_mask:             field.soil_mask ?? null,
+        nrows:                 field.nrows,
+        ncols:                 field.ncols,
+        n_drones:              config.nDrones,
+        dock_positions:        config.dockPositions,
+        orientation_deg:       config.orientationDeg,
+        strip_mode:            config.stripMode,
+        strip_width:           config.stripWidth,
+        battery_life_minutes:  config.batteryLifeMin,
+        recharge_time_minutes: config.rechargeTimeMin,
+        seed_capacity:         config.seedCapacity,
+        seed_spacing_m:        config.seedSpacingM,
+        wind_speed_ms:         config.windSpeed,
+        failure_prob:          config.failureProb,
+        survival_rate:         config.survivalRate,
+        tidal_threshold:       config.tidalThreshold,
+        seconds_per_cell:      config.secondsPerCell,
+        seed:                  42,
       })
       setSimResult(result)
       setActiveTab('sim')
@@ -177,21 +170,17 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Header */}
       <header className="header">
         <div className={`header-dot ${apiOk ? '' : 'offline'}`} title={apiOk ? 'API connected' : 'API offline'} />
         <span className="header-title">
-          Drone Fleet Optimizer
+          Mangrove Reforestation Fleet
           <span className="header-subtitle" style={{ marginLeft: 8 }}>
-            Failure-Aware Mission Planning
+            Seed Dispersal &amp; Tidal Mission Planning
           </span>
         </span>
-        <button className="btn btn-ghost btn-icon" onClick={() => setShowSettings(true)} title="Settings">
-          ⚙
-        </button>
+        <button className="btn btn-ghost btn-icon" onClick={() => setShowSettings(true)} title="Settings">⚙</button>
       </header>
 
-      {/* Sidebar */}
       <aside className="sidebar">
         <ConfigPanel
           config={config}
@@ -204,16 +193,9 @@ export default function App() {
         />
       </aside>
 
-      {/* Main */}
       <main className="main">
-        {/* Flow bar */}
-        <FlowBar
-          fieldReady={!!field}
-          baselineReady={!!simResult}
-          mcpReady={mcpDone}
-        />
+        <FlowBar fieldReady={!!field} baselineReady={!!simResult} mcpReady={mcpDone} />
 
-        {/* Tabs */}
         <div className="tabs">
           {tabs.map((t) => (
             <div
@@ -235,15 +217,9 @@ export default function App() {
             onDockPlace={(pos) => updateConfig({ dockPositions: [pos] })}
           />
         )}
-
         {activeTab === 'mc' && (
-          <MCView
-            field={field}
-            config={config}
-            onConfigChange={updateConfig}
-          />
+          <MCView field={field} config={config} onConfigChange={updateConfig} />
         )}
-
         {activeTab === 'mcp' && (
           <MCPView
             field={field}
@@ -254,9 +230,7 @@ export default function App() {
         )}
       </main>
 
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   )
 }

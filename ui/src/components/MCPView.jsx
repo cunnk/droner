@@ -117,7 +117,7 @@ function GridMini({ grid, drones = [], dockPositions = [], cellSize = 10,
       ctx.globalAlpha = 1.0
     }
 
-    // Event cell markers — bug emoji (🐛 alive, 💀 sprayed)
+    // Event cell markers — tidal block (🌊 submerged, 🌱 seeded)
     const bugSize = Math.max(8, cellSize * 0.75)
     ctx.font = `${bugSize}px serif`
     ctx.textAlign = 'center'
@@ -125,9 +125,9 @@ function GridMini({ grid, drones = [], dockPositions = [], cellSize = 10,
     for (const [r, c] of eventCells) {
       const cx = c * cellSize + cellSize / 2
       const cy = r * cellSize + cellSize / 2
-      const isSprayed = isSimGrid && grid[r]?.[c] === 2
-      ctx.globalAlpha = isSprayed ? 0.55 : 1.0
-      ctx.fillText(isSprayed ? '💀' : '🐛', cx, cy + 0.5)
+      const isSeeded = isSimGrid && grid[r]?.[c] === 2
+      ctx.globalAlpha = isSeeded ? 0.55 : 1.0
+      ctx.fillText(isSeeded ? '🌱' : '🌊', cx, cy + 0.5)
     }
     ctx.globalAlpha = 1.0
 
@@ -175,7 +175,7 @@ function LogEntry({ entry }) {
   }
 
   if (entry.type === 'system') {
-    const isStorm = entry.text.includes('Storm') || entry.text.includes('⛈') || entry.text.includes('⚠')
+    const isStorm = entry.text.includes('Tidal') || entry.text.includes('tidal') || entry.text.includes('Storm') || entry.text.includes('⛈') || entry.text.includes('⚠') || entry.text.includes('🌊')
     return (
       <div style={{
         fontSize: 11, padding: '4px 8px', marginBottom: 4, borderRadius: 4,
@@ -224,7 +224,8 @@ function LogEntry({ entry }) {
 
   if (entry.type === 'tool_result') {
     const highlight = ['coverage_pct', 'priority_coverage', 'strips_assigned', 'strips_deferred',
-      'status', 'alert', 'minutes_remaining', 'mandatory_count', 'makespan', 'timesteps', 'note']
+      'status', 'alert', 'minutes_remaining', 'mandatory_count', 'makespan', 'timesteps', 'note',
+      'seeds_planted', 'blocked_zones']
     const items = Object.entries(entry.result).filter(([k]) => highlight.includes(k)).slice(0, 5)
     return (
       <div style={{ padding: '4px 10px 6px', marginBottom: 6, borderLeft: '2px solid var(--border2)' }}>
@@ -260,8 +261,8 @@ function MetricsChart({ bl, ad }) {
       AI: ad?.coverage_pct != null ? +ad.coverage_pct.toFixed(1) : null,
     },
     {
-      metric: 'Priority\nZones ★',
-      shortMetric: 'Priority ★',
+      metric: 'High-priority\nMudflat',
+      shortMetric: 'Mudflat ★',
       Baseline: bl?.top_priority_coverage != null ? +(bl.top_priority_coverage * 100).toFixed(1) : null,
       AI: ad?.top_priority_coverage != null ? +(ad.top_priority_coverage * 100).toFixed(1) : null,
     },
@@ -295,7 +296,7 @@ function MetricsChart({ bl, ad }) {
         fontSize: 9, fontWeight: 600, color: 'var(--text-dim)',
         textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4,
       }}>
-        At storm deadline — Baseline vs AI
+        At tidal deadline — Baseline vs AI
       </div>
       <ResponsiveContainer width="100%" height={90}>
         <BarChart data={data} barCategoryGap="30%" barGap={3}
@@ -332,8 +333,8 @@ function MetricsChart({ bl, ad }) {
         return (
           <div style={{ fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.5, marginTop: 2 }}>
             {deltaP > 0.01
-              ? `✦ AI secured ${(deltaP * 100).toFixed(1)}pp more priority coverage`
-              : `Overall coverage ${deltaC >= 0 ? '+' : ''}${deltaC.toFixed(1)}pp`}
+              ? `✦ AI secured ${(deltaP * 100).toFixed(1)}pp more high-priority mudflat coverage`
+              : `Overall seeding ${deltaC >= 0 ? '+' : ''}${deltaC.toFixed(1)}pp`}
             {deltaP > 0.01 && deltaC < -1 ? `, trading ${Math.abs(deltaC).toFixed(1)}pp overall.` : '.'}
           </div>
         )
@@ -343,13 +344,13 @@ function MetricsChart({ bl, ad }) {
       <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 9, color: 'var(--text-dim)' }}>
           <div style={{ width: 10, height: 10, background: 'rgba(240,160,48,0.5)', border: '1px solid #f0a030', borderRadius: 1 }} />
-          Mandatory zones
+          High-priority mudflat
         </div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 9, color: 'var(--text-dim)' }}>
-          <span style={{ fontSize: 11 }}>🐛</span> Pest event
+          <span style={{ fontSize: 11 }}>🌊</span> Tidal block
         </div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 9, color: 'var(--text-dim)' }}>
-          <span style={{ fontSize: 11 }}>💀</span> Sprayed
+          <span style={{ fontSize: 11 }}>🌱</span> Seeded
         </div>
       </div>
     </div>
@@ -374,9 +375,9 @@ function EventsTable({ eventCells, visibleCount, currentStep, grid }) {
           alignItems: 'center', gap: 6, userSelect: 'none',
         }}
       >
-        <span style={{ fontSize: 11 }}>🐛</span>
+        <span style={{ fontSize: 11 }}>🌊</span>
         <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>
-          Field Events
+          Tidal Block Events
         </span>
         <span style={{ fontSize: 10, color: 'var(--text-dim)', marginRight: 4 }}>
           {revealed}/{eventCells.length} reported
@@ -403,10 +404,10 @@ function EventsTable({ eventCells, visibleCount, currentStep, grid }) {
                 const cellVal = isVisible ? grid?.[r]?.[c] : null
                 const status = !isVisible ? '🔒 not yet'
                   : !isSimGrid ? '—'
-                  : cellVal === 2 ? '💀 sprayed'
+                  : cellVal === 2 ? '🌱 seeded'
                   : cellVal === 1 ? '⚡ active'
-                  : cellVal === 3 ? '✗ failed'
-                  : '🐛 untouched'
+                  : cellVal === 3 ? '✗ blocked'
+                  : '🌊 submerged'
                 return (
                   <tr key={i} style={{
                     background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
@@ -497,12 +498,23 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
     cleanupRef.current = () => controller.abort()
 
     const body = {
-      grid: field.grid, nrows: field.nrows, ncols: field.ncols,
+      grid: field.grid,
+      soil_mask: field.soil_mask ?? null,
+      nrows: field.nrows, ncols: field.ncols,
       n_drones: config.nDrones ?? 3,
       dock_positions: config.dockPositions ?? [[0, 0]],
       orientation_deg: config.orientationDeg ?? 0,
+      strip_mode: config.stripMode ?? 'lawnmower',
+      strip_width: config.stripWidth ?? 2,
       seconds_per_cell: config.secondsPerCell ?? 2.0,
-      battery_drain: config.batteryDrain ?? 0,
+      battery_life_minutes: config.batteryLifeMin ?? 35,
+      recharge_time_minutes: config.rechargeTimeMin ?? 60,
+      seed_capacity: config.seedCapacity ?? 6000,
+      seed_spacing_m: config.seedSpacingM ?? 1.5,
+      seed_jitter_sigma: config.seedJitter ?? 0.3,
+      wind_speed_ms: config.windSpeed ?? 0,
+      failure_prob: config.failureProb ?? 0,
+      survival_rate: config.survivalRate ?? 0.4,
       weather_enabled: weatherEnabled, weather_minutes: weatherMinutes,
       field_events_enabled: fieldEventsEnabled, n_field_events: nFieldEvents,
       api_key: apiKey,
@@ -555,7 +567,7 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
   const cellSize = Math.floor(Math.min(300 / nrows, 300 / ncols, 13))
 
   const frameEvent = frame?.event ?? null
-  const isStormEvent = frameEvent && (frameEvent.includes('Storm') || frameEvent.includes('⛈') || frameEvent.includes('⚠'))
+  const isStormEvent = frameEvent && (frameEvent.includes('Tidal') || frameEvent.includes('tidal') || frameEvent.includes('Storm') || frameEvent.includes('⛈') || frameEvent.includes('⚠') || frameEvent.includes('🌊'))
   const pastStorm = stormTs != null && currentStep >= stormTs
 
   const bl = result?.baseline_at_deadline ?? null
@@ -578,9 +590,9 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
         display: 'flex', flexDirection: 'column', gap: 0,
       }}>
         <div className="section">
-          <div className="section-title">Weather Event</div>
+          <div className="section-title">Tidal Event</div>
           <div className="toggle-row" style={{ marginBottom: 10 }}>
-            <span className="toggle-label">Storm warning</span>
+            <span className="toggle-label">Tidal surge warning</span>
             <label className="toggle">
               <input type="checkbox" checked={weatherEnabled} onChange={e => setWeatherEnabled(e.target.checked)} />
               <span className="toggle-track" />
@@ -589,22 +601,22 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
           {weatherEnabled && (
             <div className="field-group">
               <div className="field-label">
-                <span>Time until storm</span>
+                <span>Surge arrival time</span>
                 <span className="field-value">{weatherMinutes} min</span>
               </div>
               <input type="range" min={2} max={20} step={1} value={weatherMinutes}
                 onChange={e => setWeatherMinutes(Number(e.target.value))} />
               <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>
-                Deadline: {weatherMinutes * 60}s per drone
+                Window: {weatherMinutes * 60}s per drone
               </div>
             </div>
           )}
         </div>
 
         <div className="section">
-          <div className="section-title">Field Reports</div>
+          <div className="section-title">Tidal Reports</div>
           <div className="toggle-row" style={{ marginBottom: 10 }}>
-            <span className="toggle-label">Pest / sensor events</span>
+            <span className="toggle-label">Tidal block events</span>
             <label className="toggle">
               <input type="checkbox" checked={fieldEventsEnabled} onChange={e => setFieldEventsEnabled(e.target.checked)} />
               <span className="toggle-track" />
@@ -613,7 +625,7 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
           {fieldEventsEnabled && (
             <div className="field-group">
               <div className="field-label">
-                <span>Events during mission</span>
+                <span>Blocked zones</span>
                 <span className="field-value">{nFieldEvents}</span>
               </div>
               <input type="range" min={1} max={6} value={nFieldEvents}
@@ -718,19 +730,19 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
               alignItems: 'center', justifyContent: 'center',
               gap: 6,
             }}>
-              <div style={{ fontSize: 44, lineHeight: 1 }}>⛈</div>
+              <div style={{ fontSize: 44, lineHeight: 1 }}>🌊</div>
               <div style={{
                 fontSize: 22, fontWeight: 800, color: '#f85149',
                 letterSpacing: '0.03em', textAlign: 'center',
                 lineHeight: 1.2,
               }}>
-                Storm Arrived
+                Tidal Surge Arrived
               </div>
               <div style={{
                 fontSize: 12, color: 'var(--text-muted)', textAlign: 'center',
                 letterSpacing: '0.02em',
               }}>
-                Drones recalled · Mission window closed
+                Drones recalled · Planting window closed
               </div>
               {(bl || ad) && (
                 <div style={{
@@ -761,7 +773,7 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
                   {/* Priority zones row */}
                   {(bl?.top_priority_coverage != null || ad?.top_priority_coverage != null) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 0, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                      <div style={{ flex: 1, fontSize: 10, color: 'var(--text-dim)' }}>Priority ★</div>
+                      <div style={{ flex: 1, fontSize: 10, color: 'var(--text-dim)' }}>Mudflat ★</div>
                       <div style={{ width: 70, textAlign: 'center', fontSize: 18, fontWeight: 700, color: '#6e7998' }}>
                         {bl?.top_priority_coverage != null ? `${(bl.top_priority_coverage * 100).toFixed(1)}%` : '—'}
                       </div>
@@ -806,12 +818,12 @@ export default function MCPView({ field, config, simResult, onMcpDone }) {
                 style={{ flex: 1 }}
                 onChange={e => { setCurrentStep(Number(e.target.value)); setPlaying(false) }} />
               <span style={{ fontSize: 10, color: pastStorm ? 'var(--danger)' : 'var(--text-dim)', minWidth: 48, textAlign: 'right', fontWeight: pastStorm ? 600 : 400 }}>
-                {pastStorm ? '⛈' : ''} {currentStep}/{stormTs ?? totalSteps - 1}
+                {pastStorm ? '🌊' : ''} {currentStep}/{stormTs ?? totalSteps - 1}
               </span>
             </div>
             {stormTs != null && !pastStorm && (
               <div style={{ fontSize: 10, textAlign: 'center', color: 'var(--text-dim)', marginTop: 2 }}>
-                ⛈ Storm at t={stormTs} · {stormTs - currentStep} steps remaining
+                🌊 Tidal surge at t={stormTs} · {stormTs - currentStep} steps remaining
               </div>
             )}
           </div>
