@@ -410,7 +410,15 @@ def simulate(
             if state == "frozen":
                 ds["frozen_remaining"] -= 1
                 if ds["frozen_remaining"] <= 0:
-                    ds["state"] = "spraying"
+                    # Restore appropriate pre-freeze state rather than blindly
+                    # setting "spraying" -- a comms failure can fire while the
+                    # drone is idle or in transit, leaving current_strip = None.
+                    if ds["transit_target"] is not None:
+                        ds["state"] = "moving"
+                    elif ds["current_strip"] is not None:
+                        ds["state"] = "spraying"
+                    else:
+                        ds["state"] = "idle"
                 all_done = False
                 continue
 
@@ -539,14 +547,21 @@ def simulate(
 
                 else:
                     # Strip finished -- mark spray cells complete, leave non-spray cells untouched
-                    spray_set = set(strip_map[ds["current_strip"]].spray_cells)
-                    for r, c in cells:
-                        if (r, c) in spray_set and grid[r][c] != CELL_FAILED:
-                            grid[r][c] = CELL_COMPLETE
-                    ds["current_strip"]        = None
-                    ds["current_strip_cells"]  = []
-                    ds["current_cell_index"]   = 0
-                    ds["state"]                = "idle"
+                    if ds["current_strip"] is None:
+                        # Defensive: no strip assigned but state is spraying;
+                        # reset to idle so the drone can pick up its next strip.
+                        ds["current_strip_cells"] = []
+                        ds["current_cell_index"]  = 0
+                        ds["state"]               = "idle"
+                    else:
+                        spray_set = set(strip_map[ds["current_strip"]].spray_cells)
+                        for r, c in cells:
+                            if (r, c) in spray_set and grid[r][c] != CELL_FAILED:
+                                grid[r][c] = CELL_COMPLETE
+                        ds["current_strip"]        = None
+                        ds["current_strip_cells"]  = []
+                        ds["current_cell_index"]   = 0
+                        ds["state"]                = "idle"
                     if queues[d_id]:
                         all_done = False
 

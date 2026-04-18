@@ -444,6 +444,10 @@ async def mc_stream(req: MCRequest):
 
         all_seeds: List[float] = []
         all_survivors: List[float] = []
+        all_makespan: List[float] = []
+        all_refills: List[float] = []
+        all_recharges: List[float] = []
+        all_distance: List[float] = []
 
         for i, run_seed in enumerate(seeds):
             def run_one(s=run_seed):
@@ -465,7 +469,27 @@ async def mc_stream(req: MCRequest):
                     survival_rate=req.survival_rate,
                     meters_per_cell=sim_params["meters_per_cell"],
                 )
-                return {**base_m, **refo_m}
+                # Battery recharge events (natural drain returns to dock)
+                recharges = sum(
+                    1 for step in hist
+                    if step.get("event") and any(
+                        kw in step["event"].lower()
+                        for kw in ("battery out", "battery depleted", "injected battery")
+                    )
+                )
+                # Total fleet distance: sum Manhattan steps across all drones
+                dist_cells = 0.0
+                for t in range(1, len(hist)):
+                    prev = {d["id"]: d["position"] for d in hist[t - 1]["drones"]}
+                    for d in hist[t]["drones"]:
+                        p, c = prev.get(d["id"]), d.get("position")
+                        if p and c:
+                            dist_cells += abs(c[0] - p[0]) + abs(c[1] - p[1])
+                return {
+                    **base_m, **refo_m,
+                    "_recharges": recharges,
+                    "_dist_cells": dist_cells,
+                }
 
             m = await asyncio.to_thread(run_one)
             all_coverage.append(float(m.get("coverage_pct", 0)))
@@ -479,6 +503,10 @@ async def mc_stream(req: MCRequest):
             survivors = m.get("expected_survivors")
             if survivors is not None:
                 all_survivors.append(float(survivors))
+            all_makespan.append(float(m.get("makespan", 0)))
+            all_refills.append(float(m.get("dock_returns_for_seeds", 0)))
+            all_recharges.append(float(m.get("_recharges", 0)))
+            all_distance.append(float(m.get("_dist_cells", 0)) * sim_params["meters_per_cell"])
 
             yield f"data: {json.dumps({'type': 'progress', 'done': i + 1, 'total': req.n_runs})}\n\n"
 
@@ -487,6 +515,10 @@ async def mc_stream(req: MCRequest):
         rec_arr = np.array(all_recovery) if all_recovery else np.array([0.0])
         seeds_arr = np.array(all_seeds) if all_seeds else None
         surv_arr = np.array(all_survivors) if all_survivors else None
+        mks_arr = np.array(all_makespan)
+        ref_arr = np.array(all_refills)
+        rch_arr = np.array(all_recharges)
+        dst_arr = np.array(all_distance)
 
         result = {
             "type": "result",
@@ -500,7 +532,14 @@ async def mc_stream(req: MCRequest):
             "priority_p5": float(np.percentile(pri, 5)),
             "recovery_mean": float(np.mean(rec_arr)),
             "recovery_p95": float(np.percentile(rec_arr, 95)),
+            "makespan_p5": float(np.percentile(mks_arr, 5)),
+            "makespan_median": float(np.median(mks_arr)),
+            "makespan_p95": float(np.percentile(mks_arr, 95)),
+            "refills_median": float(np.median(ref_arr)),
+            "recharges_median": float(np.median(rch_arr)),
+            "distance_median_m": float(np.median(dst_arr)),
             "all_coverage": cov.tolist(),
+            "all_makespan_raw": mks_arr.tolist(),
             "all_recovery": rec_arr.tolist() if len(all_recovery) > 0 else [],
         }
         if seeds_arr is not None:
