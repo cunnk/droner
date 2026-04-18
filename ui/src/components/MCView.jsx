@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend,
 } from 'recharts'
 import { streamMonteCarlo } from '../api.js'
 
@@ -29,8 +29,8 @@ function makeHistogram(values, nBins = 15) {
 
 // ── Config column ─────────────────────────────────────────────────────────────
 
-function ConfigCol({ title, nDrones, seedSpacingM, windSpeed, nRuns,
-                     onDrones, onSeedSpacing, onWindSpeed, onRuns }) {
+function ConfigCol({ title, nDrones, seedSpacingM, windSpeed, failureProb, seedCapacity, nRuns,
+                     onDrones, onSeedSpacing, onWindSpeed, onFailureProb, onSeedCapacity, onRuns }) {
   return (
     <div className="mc-config-col">
       <div className="mc-config-col-title">{title}</div>
@@ -64,6 +64,26 @@ function ConfigCol({ title, nDrones, seedSpacingM, windSpeed, nRuns,
 
       <div className="field-group">
         <div className="field-label">
+          <span>Seed capacity</span>
+          <span className="field-value">{seedCapacity.toLocaleString()} seeds</span>
+        </div>
+        <input type="range" min={1000} max={12000} step={500} value={seedCapacity}
+          onChange={(e) => onSeedCapacity(Number(e.target.value))} />
+      </div>
+
+      <div className="field-group">
+        <div className="field-label">
+          <span>Drone failure prob</span>
+          <span className="field-value" style={{ color: failureProb > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+            {failureProb === 0 ? 'none' : `${Math.round(failureProb * 100)}%`}
+          </span>
+        </div>
+        <input type="range" min={0} max={0.5} step={0.05} value={failureProb}
+          onChange={(e) => onFailureProb(Number(e.target.value))} />
+      </div>
+
+      <div className="field-group">
+        <div className="field-label">
           <span>Simulations</span>
           <span className="field-value">{nRuns}</span>
         </div>
@@ -82,31 +102,76 @@ function ConfigCol({ title, nDrones, seedSpacingM, windSpeed, nRuns,
 
 // ── Stats row ─────────────────────────────────────────────────────────────────
 
-function StatsRow({ result, label, color }) {
-  if (!result) return null
+function StatBox({ val, label, color }) {
   return (
-    <div className="mc-stats">
-      <div className="mc-stat">
-        <div className={`mc-stat-val p5`} style={{ color: 'var(--danger)' }}>
-          {result.coverage_p5?.toFixed(1)}%
-        </div>
-        <div className="mc-stat-label">P5 (worst)</div>
+    <div className="mc-stat">
+      <div className="mc-stat-val" style={color ? { color } : undefined}>{val}</div>
+      <div className="mc-stat-label">{label}</div>
+    </div>
+  )
+}
+
+function SectionLabel({ children }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 600, letterSpacing: '0.08em',
+      textTransform: 'uppercase', color: 'var(--text-dim)',
+      marginTop: 10, marginBottom: 4,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function StatsRow({ result }) {
+  if (!result) return null
+
+  const distKm = result.distance_median_m != null
+    ? (result.distance_median_m / 1000).toFixed(1)
+    : null
+
+  return (
+    <div>
+      {/* Primary: makespan */}
+      <SectionLabel>Mission Duration</SectionLabel>
+      <div className="mc-stats">
+        {result.makespan_p5 != null && (
+          <StatBox val={`${Math.round(result.makespan_p5)}`} label="P5 best-case" color="var(--success)" />
+        )}
+        {result.makespan_median != null && (
+          <StatBox val={`${Math.round(result.makespan_median)}`} label="Median steps" />
+        )}
+        {result.makespan_p95 != null && (
+          <StatBox val={`${Math.round(result.makespan_p95)}`} label="P95 worst-case" color="var(--danger)" />
+        )}
+        {result.recharges_median != null && (
+          <StatBox val={result.recharges_median.toFixed(1)} label="Recharges (med)" />
+        )}
+        {distKm != null && (
+          <StatBox val={`${distKm} km`} label="Fleet dist (med)" />
+        )}
       </div>
-      <div className="mc-stat">
-        <div className="mc-stat-val p50">{result.coverage_p50?.toFixed(1)}%</div>
-        <div className="mc-stat-label">Median</div>
+
+      {/* Secondary: seeds */}
+      <SectionLabel>Seeds</SectionLabel>
+      <div className="mc-stats" style={{ flexWrap: 'wrap' }}>
+        {result.seeds_median != null && (
+          <StatBox val={Math.round(result.seeds_median).toLocaleString()} label="Seeds (med)" />
+        )}
+        {result.survivors_median != null && (
+          <StatBox val={Math.round(result.survivors_median).toLocaleString()} label="Survivors (med)" color="var(--success)" />
+        )}
+        {result.refills_median != null && (
+          <StatBox val={result.refills_median.toFixed(1)} label="Seed refills" />
+        )}
       </div>
-      <div className="mc-stat">
-        <div className="mc-stat-val p95" style={{ color: 'var(--success)' }}>
-          {result.coverage_p95?.toFixed(1)}%
-        </div>
-        <div className="mc-stat-label">P95 (best)</div>
-      </div>
-      <div className="mc-stat">
-        <div className="mc-stat-val neutral" style={{ color: 'var(--text)' }}>
-          ±{result.coverage_std?.toFixed(1)}%
-        </div>
-        <div className="mc-stat-label">Std dev</div>
+
+      {/* Tertiary: coverage (deemphasised) */}
+      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', display: 'flex', gap: 16 }}>
+        <span>Coverage — P5: <strong style={{ color: 'var(--text-muted)' }}>{result.coverage_p5?.toFixed(1)}%</strong></span>
+        <span>Median: <strong style={{ color: 'var(--text-muted)' }}>{result.coverage_p50?.toFixed(1)}%</strong></span>
+        <span>P95: <strong style={{ color: 'var(--text-muted)' }}>{result.coverage_p95?.toFixed(1)}%</strong></span>
+        <span>±{result.coverage_std?.toFixed(1)}%</span>
       </div>
     </div>
   )
@@ -121,7 +186,7 @@ function CustomTooltip({ active, payload, label }) {
       background: 'var(--panel2)', border: '1px solid var(--border)',
       borderRadius: 6, padding: '8px 12px', fontSize: 12,
     }}>
-      <div style={{ color: 'var(--text-muted)' }}>{label}%</div>
+      <div style={{ color: 'var(--text-muted)' }}>{label} steps</div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color }}>
           {p.name}: {p.value} runs
@@ -138,12 +203,16 @@ export default function MCView({ field, config, onConfigChange }) {
     nDrones: config.nDrones ?? 3,
     seedSpacingM: config.seedSpacingM ?? 1.5,
     windSpeed: 0,
+    failureProb: 0,
+    seedCapacity: config.seedCapacity ?? 6000,
     nRuns: 50,
   })
   const [configB, setConfigB] = useState({
     nDrones: Math.min(8, (config.nDrones ?? 3) + 2),
     seedSpacingM: Math.max(0.5, (config.seedSpacingM ?? 1.5) - 0.5),
     windSpeed: 0,
+    failureProb: 0.15,
+    seedCapacity: config.seedCapacity ?? 6000,
     nRuns: 50,
   })
 
@@ -189,9 +258,9 @@ export default function MCView({ field, config, onConfigChange }) {
         wind_speed_ms: cfg.windSpeed,
         battery_life_minutes: config.batteryLifeMin ?? 35,
         recharge_time_minutes: config.rechargeTimeMin ?? 60,
-        seed_capacity: config.seedCapacity ?? 6000,
+        seed_capacity: cfg.seedCapacity ?? 6000,
         seed_jitter_sigma: config.seedJitter ?? 0.3,
-        failure_prob: config.failureProb ?? 0,
+        failure_prob: cfg.failureProb ?? 0,
         survival_rate: config.survivalRate ?? 0.4,
         seconds_per_cell: config.secondsPerCell ?? 2.0,
         seed: 42,
@@ -205,30 +274,40 @@ export default function MCView({ field, config, onConfigChange }) {
     cleanupRef.current = cancel
   }, [field, configA, configB, config])
 
-  // Build combined histogram data
+  // Build combined makespan histogram
   const histData = (() => {
     if (!resultA && !resultB) return []
     const allVals = [
-      ...(resultA?.all_coverage ?? []),
-      ...(resultB?.all_coverage ?? []),
+      ...(resultA?.all_makespan_raw ?? []),
+      ...(resultB?.all_makespan_raw ?? []),
     ]
     if (!allVals.length) return []
-    const min = Math.floor(Math.min(...allVals))
-    const max = Math.ceil(Math.max(...allVals))
-    const nBins = 15
-    const binWidth = (max - min || 1) / nBins
+
+    const globalMin = Math.floor(Math.min(...allVals))
+    const globalMax = Math.ceil(Math.max(...allVals))
+    const range = globalMax - globalMin || 1
+
+    // Use integer bin widths so every label is a unique integer string —
+    // duplicate labels in a categorical BarChart cause bars to overwrite each other.
+    const binWidth = Math.max(1, Math.ceil(range / 15))
+    const nBins = Math.ceil(range / binWidth) + 1   // +1 ensures globalMax is covered
 
     return Array.from({ length: nBins }, (_, i) => {
-      const lo = min + i * binWidth
+      const lo = globalMin + i * binWidth
       const hi = lo + binWidth
-      const label = `${lo.toFixed(0)}`
-      const countA = resultA
-        ? resultA.all_coverage.filter((v) => v >= lo && v < hi).length
-        : undefined
-      const countB = resultB
-        ? resultB.all_coverage.filter((v) => v >= lo && v < hi).length
-        : undefined
-      return { label, countA, countB }
+      const isLast = i === nBins - 1
+      // Include hi on the last bin so globalMax values aren't silently dropped
+      const inBin = (v) => v >= lo && (isLast ? v <= hi : v < hi)
+
+      return {
+        label: String(lo),
+        countA: resultA?.all_makespan_raw != null
+          ? resultA.all_makespan_raw.filter(inBin).length
+          : undefined,
+        countB: resultB?.all_makespan_raw != null
+          ? resultB.all_makespan_raw.filter(inBin).length
+          : undefined,
+      }
     })
   })()
 
@@ -243,10 +322,14 @@ export default function MCView({ field, config, onConfigChange }) {
           nDrones={configA.nDrones}
           seedSpacingM={configA.seedSpacingM}
           windSpeed={configA.windSpeed}
+          failureProb={configA.failureProb}
+          seedCapacity={configA.seedCapacity}
           nRuns={configA.nRuns}
           onDrones={(v) => setConfigA((c) => ({ ...c, nDrones: v }))}
           onSeedSpacing={(v) => setConfigA((c) => ({ ...c, seedSpacingM: v }))}
           onWindSpeed={(v) => setConfigA((c) => ({ ...c, windSpeed: v }))}
+          onFailureProb={(v) => setConfigA((c) => ({ ...c, failureProb: v }))}
+          onSeedCapacity={(v) => setConfigA((c) => ({ ...c, seedCapacity: v }))}
           onRuns={(v) => setConfigA((c) => ({ ...c, nRuns: v }))}
         />
         <ConfigCol
@@ -254,10 +337,14 @@ export default function MCView({ field, config, onConfigChange }) {
           nDrones={configB.nDrones}
           seedSpacingM={configB.seedSpacingM}
           windSpeed={configB.windSpeed}
+          failureProb={configB.failureProb}
+          seedCapacity={configB.seedCapacity}
           nRuns={configB.nRuns}
           onDrones={(v) => setConfigB((c) => ({ ...c, nDrones: v }))}
           onSeedSpacing={(v) => setConfigB((c) => ({ ...c, seedSpacingM: v }))}
           onWindSpeed={(v) => setConfigB((c) => ({ ...c, windSpeed: v }))}
+          onFailureProb={(v) => setConfigB((c) => ({ ...c, failureProb: v }))}
+          onSeedCapacity={(v) => setConfigB((c) => ({ ...c, seedCapacity: v }))}
           onRuns={(v) => setConfigB((c) => ({ ...c, nRuns: v }))}
         />
       </div>
@@ -328,24 +415,24 @@ export default function MCView({ field, config, onConfigChange }) {
 
       {hasResults && (
         <>
-          {/* Coverage histogram */}
+          {/* Makespan histogram */}
           <div className="mc-chart-card">
-            <div className="mc-chart-title">Seeding Distribution (% plantable cells covered)</div>
+            <div className="mc-chart-title">Mission Duration Distribution (steps to complete)</div>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={histData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
-                  tickLine={false} axisLine={{ stroke: 'var(--border)' }} />
+                  tickLine={false} axisLine={{ stroke: 'var(--border)' }}
+                  label={{ value: 'steps', position: 'insideBottomRight', offset: -4,
+                           fill: 'var(--text-dim)', fontSize: 9 }} />
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }}
                   tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                {resultA && <Bar dataKey="countA" name={`A (${configA.nDrones}d)`}
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {resultA && <Bar dataKey="countA" name={`Config A · ${configA.nDrones}d · med ${Math.round(resultA.makespan_median ?? 0)} steps`}
                   fill="#4f8ef7" fillOpacity={0.8} radius={[2, 2, 0, 0]} />}
-                {resultB && <Bar dataKey="countB" name={`B (${configB.nDrones}d)`}
+                {resultB && <Bar dataKey="countB" name={`Config B · ${configB.nDrones}d · med ${Math.round(resultB.makespan_median ?? 0)} steps`}
                   fill="#7c4ef7" fillOpacity={0.8} radius={[2, 2, 0, 0]} />}
-                {resultA && <ReferenceLine x={resultA.coverage_p5?.toFixed(0)}
-                  stroke="var(--danger)" strokeDasharray="4 2"
-                  label={{ value: 'P5', fill: 'var(--danger)', fontSize: 9 }} />}
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -356,32 +443,26 @@ export default function MCView({ field, config, onConfigChange }) {
               <div className="mc-chart-card">
                 <div className="mc-chart-title" style={{ color: '#4f8ef7' }}>
                   Config A — {configA.nDrones} drones · {configA.seedSpacingM.toFixed(1)} m spacing
+                  {configA.failureProb > 0 && (
+                    <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--danger)' }}>
+                      {Math.round(configA.failureProb * 100)}% fail prob
+                    </span>
+                  )}
                 </div>
                 <StatsRow result={resultA} />
-                {resultA.seeds_median != null && (
-                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-                    Seeds (median): <strong>{Math.round(resultA.seeds_median).toLocaleString()}</strong>
-                    {resultA.survivors_median != null && (
-                      <>{' '}· Survivors: <strong>{Math.round(resultA.survivors_median).toLocaleString()}</strong></>
-                    )}
-                  </div>
-                )}
               </div>
             )}
             {resultB && (
               <div className="mc-chart-card">
                 <div className="mc-chart-title" style={{ color: '#7c4ef7' }}>
                   Config B — {configB.nDrones} drones · {configB.seedSpacingM.toFixed(1)} m spacing
+                  {configB.failureProb > 0 && (
+                    <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--danger)' }}>
+                      {Math.round(configB.failureProb * 100)}% fail prob
+                    </span>
+                  )}
                 </div>
                 <StatsRow result={resultB} />
-                {resultB.seeds_median != null && (
-                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-                    Seeds (median): <strong>{Math.round(resultB.seeds_median).toLocaleString()}</strong>
-                    {resultB.survivors_median != null && (
-                      <>{' '}· Survivors: <strong>{Math.round(resultB.survivors_median).toLocaleString()}</strong></>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -395,20 +476,37 @@ export default function MCView({ field, config, onConfigChange }) {
             }}>
               <strong style={{ color: 'var(--text)' }}>Takeaway: </strong>
               {(() => {
-                const deltaP5 = resultB.coverage_p5 - resultA.coverage_p5
-                const deltaMedian = resultB.coverage_p50 - resultA.coverage_p50
+                const mA = resultA.makespan_median ?? 0
+                const mB = resultB.makespan_median ?? 0
+                const mDelta = mB - mA
+                const mPct = mA > 0 ? ((mDelta / mA) * 100).toFixed(0) : null
+
                 const dronesDelta = configB.nDrones - configA.nDrones
+                const failDelta = configB.failureProb - configA.failureProb
                 const spacingDelta = configA.seedSpacingM - configB.seedSpacingM
-                if (Math.abs(deltaP5) < 2 && Math.abs(deltaMedian) < 2) {
-                  const droneStr = dronesDelta !== 0
-                    ? `Adding ${Math.abs(dronesDelta)} drone${Math.abs(dronesDelta) > 1 ? 's' : ''}`
-                    : 'Config B'
-                  return `${droneStr} has minimal impact on coverage under these conditions.`
+
+                const conditions = []
+                if (dronesDelta !== 0) conditions.push(
+                  `${Math.abs(dronesDelta)} ${dronesDelta > 0 ? 'more' : 'fewer'} drone${Math.abs(dronesDelta) > 1 ? 's' : ''}`
+                )
+                if (failDelta > 0.01) conditions.push(`+${Math.round(failDelta * 100)}pp failure risk`)
+                else if (failDelta < -0.01) conditions.push(`${Math.round(Math.abs(failDelta) * 100)}pp less failure risk`)
+                if (spacingDelta > 0.1) conditions.push(`tighter spacing`)
+
+                const condStr = conditions.length ? ` with ${conditions.join(', ')}` : ''
+
+                if (Math.abs(mDelta) < 2) {
+                  return `Config B${condStr} shows no meaningful difference in mission duration (median ${Math.round(mB)} vs ${Math.round(mA)} steps).`
                 }
-                const dir = deltaP5 > 0 ? 'improves' : 'reduces'
-                const note = spacingDelta > 0.1 ? ` (tighter spacing: ${configB.seedSpacingM.toFixed(1)} m)` : ''
-                return `Config B ${dir} worst-case seeding by ${Math.abs(deltaP5).toFixed(1)}pp (P5)${note}. ` +
-                  `Median shifts ${deltaMedian > 0 ? '+' : ''}${deltaMedian.toFixed(1)}pp.`
+
+                const dir = mDelta < 0 ? 'cuts' : 'adds'
+                const pctStr = mPct ? ` (${Math.abs(mPct)}%)` : ''
+                const worstA = Math.round(resultA.makespan_p95 ?? 0)
+                const worstB = Math.round(resultB.makespan_p95 ?? 0)
+                const worstDelta = worstB - worstA
+                return `Config B${condStr} ${dir} median mission time by ${Math.abs(Math.round(mDelta))} steps${pctStr} ` +
+                  `(${Math.round(mA)} → ${Math.round(mB)}). ` +
+                  `Worst-case shifts ${worstDelta > 0 ? '+' : ''}${worstDelta} steps (P95: ${worstA} → ${worstB}).`
               })()}
             </div>
           )}
