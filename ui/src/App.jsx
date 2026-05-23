@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import ConfigPanel from './components/ConfigPanel.jsx'
 import SimView from './components/SimView.jsx'
 import MCView from './components/MCView.jsx'
@@ -112,18 +112,6 @@ export default function App() {
     }
   }, [])
 
-  // ── Auto-load bundled sample on first mount ───────────────────────────────────
-  useEffect(() => {
-    fetch('/sample/jubail.jpg')
-      .then(r => { if (!r.ok) throw new Error('no sample'); return r.blob() })
-      .then(blob => {
-        const file = new File([blob], 'jubail.jpg', { type: 'image/jpeg' })
-        const cfg  = { ...DEFAULT_CONFIG, uploadedFile: file }
-        setConfig(cfg)
-        handleLoadField(cfg)
-      })
-      .catch(() => { /* no sample image — user uploads manually */ })
-  }, [handleLoadField])
 
   // ── Run simulation ────────────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {

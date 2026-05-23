@@ -1,4 +1,5 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
+import GIF from 'gif.js'
 
 // ── Cell colors ────────────────────────────────────────────────────────────────
 
@@ -346,7 +347,7 @@ function MetricsBar({ metrics, planInfo, survivalRate }) {
 
 // ── Player ────────────────────────────────────────────────────────────────────
 
-function Player({ currentStep, totalSteps, playing, speed, onPlay, onPause, onStep, onSeek, onSpeedChange }) {
+function Player({ currentStep, totalSteps, playing, speed, onPlay, onPause, onStep, onSeek, onSpeedChange, onExportGif, exporting }) {
   return (
     <div className="player">
       <button className="btn btn-secondary btn-icon" onClick={() => onStep(-10)} title="Back 10">⏮</button>
@@ -379,6 +380,15 @@ function Player({ currentStep, totalSteps, playing, speed, onPlay, onPause, onSt
         />
         <span>{speed}×</span>
       </div>
+      <button
+        className="btn btn-secondary"
+        style={{ fontSize: 10, padding: '3px 8px', whiteSpace: 'nowrap', opacity: exporting ? 0.6 : 1 }}
+        onClick={onExportGif}
+        disabled={exporting}
+        title="Download animation as GIF"
+      >
+        {exporting ? 'Encoding…' : '⬇ GIF'}
+      </button>
     </div>
   )
 }
@@ -434,7 +444,9 @@ export default function SimView({ field, simResult, config, isRunning, onDockPla
   const [speed,       setSpeed]       = useState(2)
   const [showSeeds,   setShowSeeds]   = useState(false)
   const [overlayView, setOverlayView] = useState('grid')
-  const intervalRef = useRef(null)
+  const [exporting,   setExporting]   = useState(false)
+  const intervalRef  = useRef(null)
+  const canvasRef    = useRef(null)
 
   const history    = simResult?.state_history ?? null
   const totalSteps = history?.length ?? 0
@@ -488,6 +500,74 @@ export default function SimView({ field, simResult, config, isRunning, onDockPla
   const ncols    = field?.ncols ?? 32
   const cellSize = Math.floor(Math.min(480 / nrows, 480 / ncols, 16))
 
+  // GIF export: render every frame offscreen and encode
+  const handleExportGif = useCallback(() => {
+    if (!history || history.length === 0) return
+    setExporting(true)
+    setPlaying(false)
+
+    const cw = ncols * cellSize
+    const ch = nrows * cellSize
+
+    const offscreen = document.createElement('canvas')
+    offscreen.width  = cw
+    offscreen.height = ch
+    const ctx = offscreen.getContext('2d')
+
+    // Load background image once
+    const bgImg = new Image()
+    const bgSrc = field?.image_data_url ?? null
+
+    const encode = (bgImage) => {
+      const gif = new GIF({
+        workers: 2,
+        quality: 6,
+        workerScript: '/gif.worker.js',
+        width: cw,
+        height: ch,
+      })
+
+      // Sample every Nth frame to keep file size manageable
+      const step = Math.max(1, Math.floor(history.length / 120))
+
+      for (let i = 0; i < history.length; i += step) {
+        ctx.clearRect(0, 0, cw, ch)
+        if (bgImage) {
+          ctx.globalAlpha = 0.35
+          ctx.drawImage(bgImage, 0, 0, cw, ch)
+          ctx.globalAlpha = 1.0
+        }
+        const frame = history[i]
+        drawGrid(ctx, frame.grid, 'sim', cellSize, bgImage ? 0.70 : 1.0)
+        drawDocks(ctx, config.dockPositions ?? [[0, 0]], cellSize)
+        drawDrones(ctx, frame.drones ?? [], cellSize)
+        drawScaleBar(ctx, config.fieldWidthM ?? 0, ncols, cellSize, cw, ch)
+        gif.addFrame(ctx, { copy: true, delay: Math.round(400 / 2) })
+      }
+
+      gif.on('finished', (blob) => {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'mangrove_mission.gif'
+        a.click()
+        URL.revokeObjectURL(url)
+        setExporting(false)
+      })
+
+      gif.render()
+    }
+
+    if (bgSrc) {
+      const img = new Image()
+      img.onload = () => encode(img)
+      img.onerror = () => encode(null)
+      img.src = bgSrc
+    } else {
+      encode(null)
+    }
+  }, [history, ncols, nrows, cellSize, field, config])
+
   function handleCellClick(r, c) {
     if (config.dockPlacementMode) onDockPlace([r, c])
   }
@@ -501,7 +581,7 @@ export default function SimView({ field, simResult, config, isRunning, onDockPla
     return (
       <div className="empty-state" style={{ flex: 1 }}>
         <div className="empty-icon">🛸</div>
-        <div className="empty-text">Loading field…</div>
+        <div className="empty-text">Upload a field image to get started</div>
       </div>
     )
   }
@@ -601,6 +681,8 @@ export default function SimView({ field, simResult, config, isRunning, onDockPla
           onStep={handleStep}
           onSeek={(v) => { setCurrentStep(v); setPlaying(false) }}
           onSpeedChange={setSpeed}
+          onExportGif={handleExportGif}
+          exporting={exporting}
         />
       )}
 
@@ -610,6 +692,7 @@ export default function SimView({ field, simResult, config, isRunning, onDockPla
         planInfo={simResult?.plan}
         survivalRate={config?.survivalRate}
       />
+
     </>
   )
 }

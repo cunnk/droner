@@ -45,9 +45,30 @@ All parameters feed directly into the planner and simulator. Adjusting NDVI or b
 
 ---
 
+## Real-World Validation: Hameem Site, Abu Dhabi
+
+<img src="results/hameem_survival_comparison.png" width="900"/>
+
+The before/after aerial images from Distant Imagery Solutions cover the same section of the Hameem mangrove restoration site, photographed approximately 21 months apart (February 2024, November 2025). Running both images through the soil detection pipeline with identical thresholds produces a useful directional check: does the system correctly detect the growth that actually occurred?
+
+- Feb 2024 plantable mudflat: 571 cells (13.9% of the frame)
+- Nov 2025 plantable mudflat: 398 cells (9.7% of the frame)
+
+The pipeline identifies substantially more dark canopy in the 2025 image — consistent with the real establishment visible in the photographs. This is the core function the app depends on: distinguishing existing canopy from bare mudflat to determine where dropping additional seeds makes sense. Areas already supporting canopy are correctly excluded as non-candidates; exposed sediment is flagged as plantable. The before/after comparison suggests the detector is picking up genuine ecological change rather than noise.
+
+This is not a full validation of the method — the images differ in tidal state, the crop alignment isn't guaranteed, and RGB brightness cannot perfectly separate juvenile canopy from shadows or sediment texture. But it is at least *directionally* consistent with what happened on the ground.
+
+**As an aside**, treating the converted cells as a rough proxy for establishment: 173 of the 571 (2024) plantable cells appear to have transitioned to canopy by 2025, implying ~30% establishment on reachable mudflat. A 2023 ADIPEC paper by AlRaisi et al. on ADNOC's drone-led mangrove restoration at Abu Dhabi sites reported survival rates "remained above 40%".<sup>1</sup> The ~30% figure from this single cropped frame sits in the same order of magnitude — plausible given the RGB-only method — but should not be read as a survival rate estimate. A [February 2023 article in The Ethicalist](https://theethicalist.com/drones-million-mangrove-abu-dhabi/) provides additional public context on the broader programme.
+
+> <sup>1</sup> AlRaisi, A. A., Al Hameedi, S., AlBuainain, R. M., Glavan, J., and C. Rhodes. "Restoration Technology Hand in Hand With Nature-Based Solutions: ADNOC's Drone Led Mangrove Restoration Project." ADIPEC, Abu Dhabi, UAE, October 2023. [doi:10.2118/215963-MS](https://doi.org/10.2118/215963-MS)
+
+---
+
 ## Soil Detection Pipeline
 
 <img src="results/phase5_soil_detection.png" width="900"/>
+
+*Aerial imagery source: [Distant Imagery Solutions](https://www.linkedin.com/posts/distant-imagery-solutions_makeitintheemirates-uae-abudhabi-activity-7452634016509255680-j7p0) — Hameem mangrove restoration site, Abu Dhabi, UAE (Feb 2024 / Nov 2025). Used with reference to demonstrate real-world mangrove establishment patterns.*
 
 The system takes a raw aerial RGB image and automatically identifies plantable mudflat, excluding open water and existing canopy:
 
