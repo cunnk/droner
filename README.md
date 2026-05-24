@@ -193,6 +193,148 @@ These are integration problems, not architectural ones. The core loop — soil a
 
 ---
 
+## Optimization, Simulation, and AI — How They Fit Together
+
+### Fleet Assignment: MILP Formulation
+
+The fleet assignment problem is a makespan-minimization variant of the bin-packing problem, solved with a Mixed-Integer Linear Program (MILP) via PuLP / CBC.
+
+**Sets**
+
+| Symbol | Meaning |
+|--------|---------|
+| $D$ | Set of drones $\{d_1, \ldots, d_n\}$ |
+| $K$ | Set of strips $\{k_1, \ldots, k_m\}$ |
+| $t_k$ | Time to cover strip $k$ (seconds) |
+| $p_k$ | Priority of strip $k$ (0–1, higher = more ecologically valuable) |
+
+**Decision variables**
+
+$$x_{d,k} \in \{0,1\} \quad \text{1 if drone } d \text{ is assigned strip } k$$
+
+$$T_d \geq 0 \quad \text{total workload of drone } d \text{ (seconds)}$$
+
+$$T_{\max} \geq 0 \quad \text{makespan — the longest individual workload}$$
+
+**Constraints**
+
+$$\sum_{d \in D} x_{d,k} = 1 \quad \forall k \in K \qquad \text{(every strip covered exactly once)}$$
+
+$$T_d = \sum_{k \in K} t_k \cdot x_{d,k} \quad \forall d \in D \qquad \text{(workload definition)}$$
+
+$$T_d \leq T_{\max} \quad \forall d \in D \qquad \text{(makespan bound)}$$
+
+$$T_d \leq B \quad \forall d \in D \qquad \text{(optional battery cap, seconds)}$$
+
+**Objective — makespan mode** *(default)*
+
+$$\min \; T_{\max}$$
+
+Drives the optimizer to balance workload evenly across the fleet: the best plan is the one where the last drone finishes as early as possible.
+
+**Objective — weighted mode** *(optional)*
+
+$$\min \; \lambda \cdot T_{\max} - w_p \sum_{d \in D} \sum_{k \in K} p_k \cdot t_k \cdot x_{d,k}$$
+
+Trades overall coverage speed for ecological priority: the penalty $\lambda$ on makespan is offset by a reward for covering high-priority mudflat strips.
+
+**Solver and fallback**
+
+The solver is given a wall-clock budget (default 30 s). If it hits the limit, the best feasible solution found so far is returned. If the model is infeasible or the budget is too short, the planner falls back to a **greedy heuristic**: strips sorted by priority descending, each assigned to the currently least-loaded drone. $O(m \log n)$, always produces a valid plan.
+
+---
+
+### Three-Tier Planner
+
+The system never exposes raw MILP calls to the simulation. All planning goes through a three-tier dispatcher that selects a mode based on current context:
+
+| Mode | Condition | Approach |
+|------|-----------|----------|
+| **Full MILP** | Budget ≥ 10 s, uncertainty ≤ 0.6, problem size ≤ 200 strip-drone pairs | Full horizon, all drones, full solver budget |
+| **Degraded MILP** | Budget 2–10 s, or uncertainty > 0.6, or large problem | Drones below battery threshold excluded; strips pruned to highest-priority rolling horizon; solver budget capped at 40 % of available time |
+| **Heuristic** | Budget < 2 s, no active drones, or MILP returns infeasible | Greedy least-workload assignment — always fast, always feasible |
+
+Replanning uses the same dispatcher. When a drone fails permanently, the remaining strips are immediately re-optimized across the surviving fleet. The mode chosen depends on how much time the failure event leaves before the tidal deadline.
+
+---
+
+### Simulation Engine
+
+The simulation is a discrete-time, cell-by-cell forward model. Each timestep advances the entire fleet by one grid cell.
+
+**Drone state machine**
+
+```
+idle → moving → spraying → (idle | returning)
+                              ↓
+                           charging → idle
+         frozen (comms loss, countdown to resume)
+         failed (permanent, triggers replanning)
+```
+
+At each timestep:
+1. **Scripted and stochastic events** are injected (battery failure, mechanical failure, comms freeze, tidal surge)
+2. **Recharging drones** have their countdown decremented; drones that finish charging re-enter the active set and fly to their next strip
+3. **Active drones** each take one step: moving toward a strip entry point, advancing one cell along a strip, or returning to dock
+4. **Battery drains** at a fixed rate per cell traversed (spraying and transit alike); seed hoppers deplete per spray cell in reforestation mode
+5. **State is recorded** — grid coverage, drone positions, seed drops, events — for playback and metrics
+
+**Battery and recharge model**
+
+$$\text{drain per cell} = \frac{100\%}{\text{battery life (min)} \times 60 / \text{seconds per cell}} \times (1 + 0.015 \cdot v_{\text{wind}})$$
+
+When battery hits zero, the drone initiates a physical return to its assigned dock (one step at a time — no teleportation), recharges for a fixed number of steps, then resumes from its next assigned strip. If recharge is disabled, the failure is permanent and replanning fires immediately.
+
+**Termination**
+
+The simulation ends when all active drones are idle with empty queues and no drone is recharging. This captures the true mission end rather than a fixed step count.
+
+---
+
+### How Optimizer, Simulation, and AI Coordinate
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Offline (before launch)                                    │
+│  Soil detector → strip generator → MILP → initial plan      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │  plan (strip → drone assignments)
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Runtime simulation loop (per timestep)                     │
+│                                                             │
+│  Advance drones → drain battery → record seed drops         │
+│       │                    │                                │
+│  battery/mechanical    tidal surge                          │
+│  failure event         detected                             │
+│       │                    │                                │
+│       ▼                    ▼                                │
+│  Three-tier replanner   MCP event stream ──────────────┐    │
+│  (MILP or heuristic)    emits field state + alert       │    │
+│  redistributes          to AI coordinator               │    │
+│  remaining strips                                       │    │
+└─────────────────────────────────────────────────────────────┘
+                                                          │
+                           ┌──────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  AI coordinator (Claude via MCP)                            │
+│                                                             │
+│  1. Reads current field state — coverage map, drone status  │
+│  2. Receives tidal alert — time to surge, zones at risk     │
+│  3. Designates high-priority strips as mandatory            │
+│  4. Calls replan tool — optimizer re-runs with those strips │
+│     marked as priority; plan is injected back into sim      │
+│  5. Logs plain-language reasoning alongside the decision    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The key design constraint is **separation of concerns**. The optimizer knows nothing about time — it receives a snapshot of remaining strips and active drones, and returns an assignment. The simulation knows nothing about priorities — it just executes whatever plan it holds. The AI coordinator is the only component that reasons jointly about time pressure, ecological value, and fleet state, and it does so by calling the same optimizer tool the offline planner uses, with a different priority signal.
+
+This means the AI's decisions are auditable: every replanning call is logged with the field state that triggered it, the strips it designated as mandatory, the resulting assignment, and the reasoning. The coordination layer adds judgment on top of the same optimization machinery the rest of the system uses.
+
+---
+
 ## Branch
 
 This is the `reforestation` branch. The [`main` branch](../../tree/main) contains the agricultural use case: precision crop treatment, pest and weather event handling, and the full Monte Carlo degradation analysis.

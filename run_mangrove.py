@@ -97,7 +97,7 @@ cfg = MissionConfig(
     field_width_m         = FIELD_W_M,
     battery_life_minutes  = 35.0,
     recharge_time_seconds = 3600.0,
-    n_drones              = 3,
+    n_drones              = 6,
     dock_positions        = [(0, 0)],
     name                  = 'Mangrove Reforestation -- Abu Dhabi',
 )
@@ -121,7 +121,20 @@ transit_only = sum(len(s.cells) - len(s.spray_cells) for s in strips)
 print(f'Contour strips: {len(strips)}   Plantable cells: {total_spray}   Transit-only: {transit_only}')
 
 # -- Assignment ------------------------------------------------------------
-drones = [DroneSpec(id=i, seed_capacity=cfg.seed_capacity) for i in range(cfg.n_drones)]
+# Stagger initial battery levels evenly across one charge cycle so drones
+# return to dock at different times rather than all at once.
+# With 6 drones: 17 %, 33 %, 50 %, 67 %, 83 %, 100 % — one returns roughly
+# every  (battery_life / n_drones) minutes, keeping the field continuously
+# active instead of stalling while the whole fleet charges simultaneously.
+_n = cfg.n_drones
+drones = [
+    DroneSpec(
+        id=i,
+        seed_capacity=cfg.seed_capacity,
+        battery=round(100.0 * (i + 1) / _n, 1),
+    )
+    for i in range(_n)
+]
 result = assign_strips(strips, drones, objective_mode='makespan')
 print(f'MILP: {result.status}  makespan={result.makespan:.0f}s  solve={result.solve_time:.2f}s')
 
@@ -162,13 +175,13 @@ anim = animate(
     interval_ms       = 150,
     dock_positions    = cfg.dock_positions,
     background_image  = img_rgb,
-    save_path         = 'results/phase5_contour_mangrove.gif',
+    save_path         = 'results/phase5_mangrove_reforestation1.gif',
     show              = False,
     show_seed_drops   = True,
     mode_label        = cfg.name,
     n_plantable_cells = n_plantable,
 )
-print(f'GIF: results/phase5_contour_mangrove.gif ({len(gif_hist)} frames)')
+print(f'GIF: results/phase5_mangrove_reforestation1.gif ({len(gif_hist)} frames)')
 
 # -- Seed drop visualisation -----------------------------------------------
 fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
