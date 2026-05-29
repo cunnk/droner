@@ -62,9 +62,9 @@ All thresholds are configurable. A production deployment would use actual NIR im
 
 ## Real-World Validation: UAE Mangrove Restoration Site
 
-<img src="results/mangrove_validation_comparison.png" width="900"/>
+<img src="aerial_mangrove_images/1776846410259.jfif" width="450" align="right" style="margin-left:20px;margin-bottom:10px;"/>
 
-The before/after aerial images from Distant Imagery Solutions cover the same section of a UAE mangrove restoration site, photographed approximately 21 months apart (February 2024, November 2025). Running both images through the soil detection pipeline with identical thresholds produces a useful directional check: does the system correctly detect the growth that actually occurred?
+The before/after aerial images from [Distant Imagery Solutions](https://www.linkedin.com/posts/distant-imagery-solutions_makeitintheemirates-uae-abudhabi-activity-7452634016509255680-j7p0) cover the same section of a UAE mangrove restoration site, photographed approximately 21 months apart (February 2024, November 2025). Running both images through the soil detection pipeline with identical thresholds produces a useful directional check: does the system correctly detect the growth that actually occurred?
 
 - Feb 2024 plantable mudflat: 497 cells (12.1% of the frame)
 - Nov 2025 plantable mudflat: 349 cells (8.5% of the frame)
@@ -75,9 +75,9 @@ This is not a full validation of the method — the images differ in tidal state
 
 **As an aside**, treating the converted cells as a rough proxy for establishment: 148 of the 497 (2024) plantable cells appear to have transitioned to growth by 2025, implying ~30% change in bare mudflat coverage. A 2023 ADIPEC paper by AlRaisi et al. on ADNOC's drone-led mangrove restoration at Abu Dhabi sites reported survival rates "remained above 40%".<sup>1</sup> The ~30% figure from this single cropped frame is in the same order of magnitude — plausible given the RGB-only method — but should not be read as a survival rate estimate. A [February 2023 article in The Ethicalist](https://theethicalist.com/drones-million-mangrove-abu-dhabi/) provides additional public context on the broader programme.
 
-<img src="aerial_mangrove_images/1776846410259.jfif" width="900"/>
+<br clear="right"/>
 
-*Source imagery from the [Distant Imagery Solutions LinkedIn post](https://www.linkedin.com/posts/distant-imagery-solutions_makeitintheemirates-uae-abudhabi-activity-7452634016509255680-j7p0) documenting the UAE restoration site.*
+<img src="results/mangrove_validation_comparison.png" width="900"/>
 
 > <sup>1</sup> AlRaisi, A. A., Al Hameedi, S., AlBuainain, R. M., Glavan, J., and C. Rhodes. "Restoration Technology Hand in Hand With Nature-Based Solutions: ADNOC's Drone Led Mangrove Restoration Project." ADIPEC, Abu Dhabi, UAE, October 2023. [doi:10.2118/215963-MS](https://doi.org/10.2118/215963-MS)
 
