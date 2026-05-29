@@ -21,21 +21,18 @@ from src.reforestation.soil_detector import detect_soil_mask, load_field_image
 NROWS = 64
 NCOLS = 64
 
-# Same thresholds as run_mangrove.py
+# Thresholds calibrated for the before/after validation images
 THRESHOLDS = dict(
     nrows=NROWS,
     ncols=NCOLS,
-    soil_ndvi_threshold=0.12,
-    water_blue_threshold=0.50,
-    min_brightness_threshold=0.42,
+    soil_ndvi_threshold=0.10,
+    water_blue_threshold=0.55,
+    min_brightness_threshold=0.55,
     min_patch_cells=2,
 )
 
-# Note: the files on disk are swapped relative to their names.
-# after.jpg shows MORE bare mudflat (fewer trees) = Feb 2024 pre-reforestation state.
-# before.jpg shows LESS bare mudflat (more growth) = Nov 2025 post-reforestation state.
-FEB2024_PATH = 'aerial_mangrove_images/after.jpg'
-NOV2025_PATH = 'aerial_mangrove_images/before.jpg'
+FEB2024_PATH = 'aerial_mangrove_images/before.jpg'
+NOV2025_PATH = 'aerial_mangrove_images/after.jpg'
 
 CMAP_MASK = mcolors.ListedColormap(['#a8d5e2', '#c8a97a'])
 

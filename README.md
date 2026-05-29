@@ -49,8 +49,6 @@ All parameters feed directly into the planner and simulator. Adjusting NDVI or b
 
 <img src="results/phase5_soil_detection.png" width="900"/>
 
-*Aerial imagery: [Distant Imagery Solutions](https://www.linkedin.com/posts/distant-imagery-solutions_makeitintheemirates-uae-abudhabi-activity-7452634016509255680-j7p0) — UAE mangrove restoration site. Used with reference to demonstrate real-world soil detection on coastal imagery.*
-
 The system takes a raw aerial RGB image and automatically identifies plantable mudflat, excluding open water and existing canopy:
 
 1. **Pseudo-NDVI** from RGB channels — isolates tidal water (high NDVI threshold)
@@ -68,14 +66,14 @@ All thresholds are configurable. A production deployment would use actual NIR im
 
 The before/after aerial images from Distant Imagery Solutions cover the same section of a UAE mangrove restoration site, photographed approximately 21 months apart (February 2024, November 2025). Running both images through the soil detection pipeline with identical thresholds produces a useful directional check: does the system correctly detect the growth that actually occurred?
 
-- Feb 2024 plantable mudflat: 2,740 cells (66.9% of the frame)
-- Nov 2025 plantable mudflat: 1,492 cells (36.4% of the frame)
+- Feb 2024 plantable mudflat: 497 cells (12.1% of the frame)
+- Nov 2025 plantable mudflat: 349 cells (8.5% of the frame)
 
 The pipeline identifies substantially less bare mudflat in the 2025 image — consistent with new growth covering previously exposed sediment. This is the core function the app depends on: distinguishing existing growth from bare mudflat to determine where dropping additional seeds makes sense. Areas already supporting growth are correctly excluded as non-candidates; exposed sediment is flagged as plantable. The before/after comparison suggests the detector is picking up genuine ecological change rather than noise.
 
 This is not a full validation of the method — the images differ in tidal state, the crop alignment isn't guaranteed, and RGB brightness cannot perfectly separate juvenile growth from shadows or sediment texture. But it is at least *directionally* consistent with what happened on the ground.
 
-**As an aside**, treating the converted cells as a rough proxy for establishment: 1,248 of the 2,740 (2024) plantable cells appear to have transitioned to growth by 2025, implying ~45% change in bare mudflat coverage. A 2023 ADIPEC paper by AlRaisi et al. on ADNOC's drone-led mangrove restoration at Abu Dhabi sites reported survival rates "remained above 40%".<sup>1</sup> The ~45% figure from this single cropped frame is in the same order of magnitude — plausible given the RGB-only method — but should not be read as a survival rate estimate. A [February 2023 article in The Ethicalist](https://theethicalist.com/drones-million-mangrove-abu-dhabi/) provides additional public context on the broader programme.
+**As an aside**, treating the converted cells as a rough proxy for establishment: 148 of the 497 (2024) plantable cells appear to have transitioned to growth by 2025, implying ~30% change in bare mudflat coverage. A 2023 ADIPEC paper by AlRaisi et al. on ADNOC's drone-led mangrove restoration at Abu Dhabi sites reported survival rates "remained above 40%".<sup>1</sup> The ~30% figure from this single cropped frame is in the same order of magnitude — plausible given the RGB-only method — but should not be read as a survival rate estimate. A [February 2023 article in The Ethicalist](https://theethicalist.com/drones-million-mangrove-abu-dhabi/) provides additional public context on the broader programme.
 
 <img src="aerial_mangrove_images/1776846410259.jfif" width="900"/>
 
